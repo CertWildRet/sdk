@@ -1,0 +1,28 @@
+# Node / TypeScript
+node_modules/
+dist/
+build/
+lib/
+*.tsbuildinfo
+.npm
+.yarn/
+yarn-error.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Coverage / test
+coverage/
+.nyc_output/
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+*.pem
+keypair*.json
+
+# IDE / OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
