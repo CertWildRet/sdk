@@ -5,6 +5,7 @@ import {
   PublicKey,
   Signer,
   SystemProgram,
+  Transaction,
 } from "@solana/web3.js";
 import { TOKEN_PROGRAM_ID } from "@solana/spl-token";
 import { Bucket, MAX_FEE_RECIPIENTS } from "./constants";
@@ -213,6 +214,58 @@ export class AdminApi {
       })
       .signers([args.admin])
       .rpc();
+  }
+
+  /**
+   * V5 — narrow admin setter for the per-pull VOLUME fee. This is the
+   * ONLY active monetisation in the V5 baseline product (entry / exit /
+   * perf all default to 0 bps). Bps capped at MAX_PULL_FEE_BPS (500).
+   * Bumps blocked while `claims_open == true` (raising is gated; lowering OK).
+   */
+  async setPullFee(args: {
+    bucket: Bucket;
+    pullFeeBps: number;
+    pullFeeEnabled: boolean;
+    admin: Signer;
+  }): Promise<string> {
+    const [bucketPda] = findBucket(this.c.programId, args.bucket);
+    return this.c.program.methods
+      .setPullFee(args.pullFeeBps, args.pullFeeEnabled)
+      .accountsPartial({
+        config: this.c.configPda,
+        admin: args.admin.publicKey,
+        bucket: bucketPda,
+      })
+      .signers([args.admin])
+      .rpc();
+  }
+
+  /**
+   * V5 — bundle a `set_pull_fee` ix for every passed bucket into a single
+   * atomic transaction. Same bps + enabled flag applied to all targets.
+   * Convenient for setting Simple/Refined/Ultra in one shot from the admin
+   * console. Fails atomically if any bucket rejects (e.g. claims-open lock).
+   */
+  async setPullFeeAll(args: {
+    buckets: Bucket[];
+    pullFeeBps: number;
+    pullFeeEnabled: boolean;
+    admin: Signer;
+  }): Promise<string> {
+    const tx = new Transaction();
+    for (const bucket of args.buckets) {
+      const [bucketPda] = findBucket(this.c.programId, bucket);
+      const ix = await this.c.program.methods
+        .setPullFee(args.pullFeeBps, args.pullFeeEnabled)
+        .accountsPartial({
+          config: this.c.configPda,
+          admin: args.admin.publicKey,
+          bucket: bucketPda,
+        })
+        .instruction();
+      tx.add(ix);
+    }
+    return this.c.program.provider.sendAndConfirm!(tx, [args.admin]);
   }
 
   /**

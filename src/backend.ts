@@ -3,16 +3,22 @@ import { PublicKey, Signer, SystemProgram } from "@solana/web3.js";
 import { TOKEN_PROGRAM_ID, getAssociatedTokenAddressSync } from "@solana/spl-token";
 import { Bucket } from "./constants";
 import { CwrVaultClient } from "./client";
-import { deriveBucketAddresses } from "./pdas";
+import { deriveBucketAddresses, findFeeBucket, findFeeSchedule } from "./pdas";
 
 export class BackendApi {
   constructor(private readonly c: CwrVaultClient) {}
 
   /**
    * Move SOL from the bucket's treasury into the operator wallet for
-   * external deployment. Increases `external_value` by the same amount —
-   * NAV per share unchanged. Pinned to `cfg.operator_wallet` via on-chain
-   * `has_one` constraint.
+   * external deployment.
+   *
+   * V5 — if `pull_fee_enabled = true`, the contract automatically skims
+   * `amount × pull_fee_bps / 10000` to the global fee_bucket PDA. The
+   * operator wallet receives the NET (amount - fee). `external_value`
+   * increments by NET, so total NAV drops by exactly the fee — that's
+   * where the user pays this volume fee, transparently, via NPS.
+   *
+   * Pinned to `cfg.operator_wallet` via on-chain `has_one` constraint.
    */
   async pull(args: {
     bucket: Bucket;
@@ -21,6 +27,8 @@ export class BackendApi {
     operator: PublicKey;
   }): Promise<string> {
     const addrs = deriveBucketAddresses(this.c.programId, args.bucket);
+    const [feeBucket] = findFeeBucket(this.c.programId);
+    const [feeSchedule] = findFeeSchedule(this.c.programId);
     return this.c.program.methods
       .pull(args.amount)
       .accountsPartial({
@@ -29,6 +37,8 @@ export class BackendApi {
         config: this.c.configPda,
         backend: args.backend.publicKey,
         operatorWallet: args.operator,
+        feeBucket,
+        feeSchedule,
         systemProgram: SystemProgram.programId,
       })
       .signers([args.backend])

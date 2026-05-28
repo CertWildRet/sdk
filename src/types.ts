@@ -10,9 +10,10 @@ export type FeeScheduleState = IdlAccounts<CwrVault>["feeSchedule"];
 /**
  * Input shape for `initBucket` / `setBucketParams`.
  *
- * Mirrors `programs/cwr-vault/src/state.rs` `BucketParams`. V5 added the four
- * `entry_fee_*` / `exit_fee_*` fields; all fees default to 0 + disabled so
- * existing call-sites that omit them get pre-V5 behaviour.
+ * Mirrors `programs/cwr-vault/src/state.rs` `BucketParams`. V5 added the
+ * entry/exit/pull fee fields; all fees default to 0 + disabled so existing
+ * call-sites that omit them get pre-V5 behaviour. The pull (volume) fee is
+ * the only active monetisation in the V5 baseline product.
  */
 export type BucketParamsInput = {
   performanceFeeBps: number;
@@ -26,6 +27,9 @@ export type BucketParamsInput = {
   exitFeeBps: number;
   entryFeeEnabled: boolean;
   exitFeeEnabled: boolean;
+  /** V5 — per-`pull` volume fee in bps. Capped at MAX_PULL_FEE_BPS (500). */
+  pullFeeBps: number;
+  pullFeeEnabled: boolean;
 };
 
 /** A single entry in the genesis or year-one fee-distribution split. */
