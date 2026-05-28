@@ -1,10 +1,7 @@
 import BN from "bn.js";
 import {
-  Keypair,
-  PublicKey,
   Signer,
   SystemProgram,
-  Transaction,
   TransactionInstruction,
 } from "@solana/web3.js";
 import {
@@ -16,7 +13,8 @@ import { Bucket } from "./constants";
 import { CwrVaultClient } from "./client";
 import {
   deriveBucketAddresses,
-  findWithdrawRequest,
+  findFeeBucket,
+  findFeeSchedule,
 } from "./pdas";
 
 export class UserApi {
@@ -24,7 +22,9 @@ export class UserApi {
 
   /**
    * Deposit lamports into a bucket and receive shares.
-   * Creates the user's share-token ATA idempotently if missing.
+   * Creates the user's share-token ATA idempotently if missing. The V5
+   * entry-fee is skimmed by the program from `amount` into the global fee
+   * bucket BEFORE shares are minted (so shares reflect the net deposited).
    */
   async deposit(args: {
     bucket: Bucket;
@@ -32,6 +32,8 @@ export class UserApi {
     user: Signer;
   }): Promise<string> {
     const addrs = deriveBucketAddresses(this.c.programId, args.bucket);
+    const [feeSchedule] = findFeeSchedule(this.c.programId);
+    const [feeBucket] = findFeeBucket(this.c.programId);
     const userAta = getAssociatedTokenAddressSync(addrs.shareMint, args.user.publicKey);
 
     const ataInfo = await this.c.connection.getAccountInfo(userAta);
@@ -55,6 +57,8 @@ export class UserApi {
         shareMint: addrs.shareMint,
         userShareAta: userAta,
         user: args.user.publicKey,
+        feeBucket,
+        feeSchedule,
         tokenProgram: TOKEN_PROGRAM_ID,
         systemProgram: SystemProgram.programId,
       })
@@ -64,61 +68,56 @@ export class UserApi {
   }
 
   /**
-   * Move `shares` into escrow and start the lockup timer. The shares stay in
-   * `total_shares` (NAV exposure preserved) until `claimWithdraw`.
+   * Burn shares and withdraw the underlying SOL payout, minus the
+   * performance fee (legacy → `cfg.fee_recipient`) and V5 flat exit fee
+   * (→ global fee bucket). Only callable while `claims_open` on the bucket.
    */
-  async requestWithdraw(args: {
+  async withdraw(args: {
     bucket: Bucket;
     shares: BN;
     user: Signer;
   }): Promise<string> {
     const addrs = deriveBucketAddresses(this.c.programId, args.bucket);
-    const [requestPda] = findWithdrawRequest(
-      this.c.programId,
-      args.bucket,
-      args.user.publicKey,
-    );
-    const userAta = getAssociatedTokenAddressSync(addrs.shareMint, args.user.publicKey);
+    const userShareAta = getAssociatedTokenAddressSync(addrs.shareMint, args.user.publicKey);
+    const [feeSchedule] = findFeeSchedule(this.c.programId);
+    const [feeBucket] = findFeeBucket(this.c.programId);
+    const cfg = await this.c.program.account.config.fetch(this.c.configPda);
+    const userStoreAta = getAssociatedTokenAddressSync(cfg.storeMint, args.user.publicKey);
+
+    // Idempotently ensure the user's stORE ATA exists so withdraw can
+    // transfer the pro-rata stORE payout into it without failing.
+    const pre: TransactionInstruction[] = [];
+    const ataInfo = await this.c.connection.getAccountInfo(userStoreAta);
+    if (!ataInfo) {
+      pre.push(
+        createAssociatedTokenAccountIdempotentInstruction(
+          args.user.publicKey,
+          userStoreAta,
+          args.user.publicKey,
+          cfg.storeMint,
+        ),
+      );
+    }
 
     return this.c.program.methods
-      .requestWithdraw(args.shares)
-      .accountsPartial({
-        bucket: addrs.bucket,
-        userShareAta: userAta,
-        escrowAta: addrs.escrow,
-        withdrawRequest: requestPda,
-        user: args.user.publicKey,
-        tokenProgram: TOKEN_PROGRAM_ID,
-        systemProgram: SystemProgram.programId,
-      })
-      .signers([args.user])
-      .rpc();
-  }
-
-  /**
-   * After `unlock_at` elapses, burn escrowed shares and receive SOL at the
-   * current NAV. Will fail with InsufficientVaultSol if the backend hasn't
-   * topped up enough; caller should retry once vault is funded.
-   */
-  async claimWithdraw(args: { bucket: Bucket; user: Signer }): Promise<string> {
-    const addrs = deriveBucketAddresses(this.c.programId, args.bucket);
-    const [requestPda] = findWithdrawRequest(
-      this.c.programId,
-      args.bucket,
-      args.user.publicKey,
-    );
-    return this.c.program.methods
-      .claimWithdraw()
+      .withdraw(args.shares)
       .accountsPartial({
         bucket: addrs.bucket,
         treasury: addrs.treasury,
         shareMint: addrs.shareMint,
-        escrowAta: addrs.escrow,
-        withdrawRequest: requestPda,
+        userShareAta: userShareAta,
         user: args.user.publicKey,
+        feeRecipient: cfg.feeRecipient,
+        feeBucket,
+        feeSchedule,
+        config: this.c.configPda,
+        storeTreasury: addrs.storeTreasury,
+        userStoreAta,
+        storeMint: cfg.storeMint,
         tokenProgram: TOKEN_PROGRAM_ID,
         systemProgram: SystemProgram.programId,
       })
+      .preInstructions(pre)
       .signers([args.user])
       .rpc();
   }

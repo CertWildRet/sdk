@@ -2,10 +2,11 @@ import { PublicKey } from "@solana/web3.js";
 import {
   BUCKET_SEED,
   CONFIG_SEED,
-  ESCROW_SEED,
+  FEE_BUCKET_SEED,
+  FEE_SCHEDULE_SEED,
   SHARE_MINT_SEED,
+  STORE_TREASURY_SEED,
   TREASURY_SEED,
-  WITHDRAW_SEED,
 } from "./constants";
 
 export function findConfig(programId: PublicKey): [PublicKey, number] {
@@ -33,20 +34,21 @@ export function findShareMint(programId: PublicKey, bucketId: number): [PublicKe
   );
 }
 
-export function findEscrow(programId: PublicKey, bucketId: number): [PublicKey, number] {
-  return PublicKey.findProgramAddressSync(
-    [ESCROW_SEED, Buffer.from([bucketId])],
-    programId,
-  );
+export function findFeeSchedule(programId: PublicKey): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync([FEE_SCHEDULE_SEED], programId);
 }
 
-export function findWithdrawRequest(
+export function findFeeBucket(programId: PublicKey): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync([FEE_BUCKET_SEED], programId);
+}
+
+/** V5 — per-bucket stORE-holding token account (authority = bucket PDA). */
+export function findStoreTreasury(
   programId: PublicKey,
   bucketId: number,
-  user: PublicKey,
 ): [PublicKey, number] {
   return PublicKey.findProgramAddressSync(
-    [WITHDRAW_SEED, Buffer.from([bucketId]), user.toBuffer()],
+    [STORE_TREASURY_SEED, Buffer.from([bucketId])],
     programId,
   );
 }
@@ -55,7 +57,7 @@ export type BucketAddresses = {
   bucket: PublicKey;
   treasury: PublicKey;
   shareMint: PublicKey;
-  escrow: PublicKey;
+  storeTreasury: PublicKey;
 };
 
 export function deriveBucketAddresses(
@@ -66,6 +68,6 @@ export function deriveBucketAddresses(
     bucket: findBucket(programId, bucketId)[0],
     treasury: findTreasury(programId, bucketId)[0],
     shareMint: findShareMint(programId, bucketId)[0],
-    escrow: findEscrow(programId, bucketId)[0],
+    storeTreasury: findStoreTreasury(programId, bucketId)[0],
   };
 }

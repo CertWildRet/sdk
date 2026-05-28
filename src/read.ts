@@ -5,28 +5,23 @@ import { Bucket } from "./constants";
 import { CwrVaultClient } from "./client";
 import {
   findBucket,
-  findEscrow,
+  findFeeBucket,
+  findFeeSchedule,
   findShareMint,
   findTreasury,
-  findWithdrawRequest,
 } from "./pdas";
 import {
   navPerShare as computeNavPerShare,
   payoutForShares,
   sharesForDeposit,
 } from "./math";
-import type {
-  BucketState,
-  ConfigState,
-  WithdrawRequestState,
-} from "./types";
+import type { BucketState, ConfigState, FeeScheduleState } from "./types";
 
 export type NavSnapshot = {
   solInVault: BN;
   externalValue: BN;
   totalNav: BN;
   totalShares: BN;
-  pendingWithdrawShares: BN;
   navPerShareX18: BN;
   paused: boolean;
 };
@@ -55,18 +50,9 @@ export class ReadApi {
       externalValue,
       totalNav,
       totalShares,
-      pendingWithdrawShares: new BN(b.pendingWithdrawShares.toString()),
       navPerShareX18: computeNavPerShare(totalNav, totalShares),
       paused: b.paused,
     };
-  }
-
-  async withdrawRequest(
-    bucket: Bucket,
-    user: PublicKey,
-  ): Promise<WithdrawRequestState | null> {
-    const [pda] = findWithdrawRequest(this.c.programId, bucket, user);
-    return this.c.program.account.withdrawRequest.fetchNullable(pda);
   }
 
   async userShares(bucket: Bucket, user: PublicKey): Promise<BN> {
@@ -92,15 +78,10 @@ export class ReadApi {
     return new BN(info?.lamports ?? 0);
   }
 
-  async escrowBalance(bucket: Bucket): Promise<BN> {
-    const [pda] = findEscrow(this.c.programId, bucket);
-    const acc = await getAccount(this.c.connection, pda);
-    return new BN(acc.amount.toString());
-  }
-
   /**
    * Preview the shares a user would receive for depositing `amount`, given the
-   * current bucket state. No on-chain call after the first state fetch.
+   * current bucket state. Does not account for the V5 entry fee — caller should
+   * subtract the fee before calling if it's enabled on the target bucket.
    */
   async previewDeposit(bucket: Bucket, amount: BN): Promise<BN> {
     const snap = await this.navSnapshot(bucket);
@@ -109,12 +90,26 @@ export class ReadApi {
   }
 
   /**
-   * Preview the SOL payout for redeeming `shares`, given current bucket state.
-   * Subject to InsufficientVaultSol at claim time if `sol_in_vault < payout`.
+   * Preview the gross SOL payout for redeeming `shares`. Does not subtract
+   * the perf-fee or V5 exit fee — caller should apply those separately for
+   * a final user-visible payout estimate.
    */
   async previewWithdraw(bucket: Bucket, shares: BN): Promise<BN> {
     const snap = await this.navSnapshot(bucket);
     if (!snap) throw new Error(`Bucket ${bucket} not initialized`);
     return payoutForShares(shares, snap.totalShares, snap.totalNav);
+  }
+
+  /** V5 — fetch the global fee schedule. */
+  async feeSchedule(): Promise<FeeScheduleState | null> {
+    const [pda] = findFeeSchedule(this.c.programId);
+    return this.c.program.account.feeSchedule.fetchNullable(pda);
+  }
+
+  /** V5 — current SOL balance accumulated in the global fee bucket. */
+  async feeBucketLamports(): Promise<BN> {
+    const [pda] = findFeeBucket(this.c.programId);
+    const info = await this.c.connection.getAccountInfo(pda);
+    return new BN(info?.lamports ?? 0);
   }
 }

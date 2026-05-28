@@ -4,15 +4,23 @@ export type CwrEventName =
   | "InitializedEvent"
   | "BucketInitializedEvent"
   | "DepositEvent"
-  | "RequestWithdrawEvent"
-  | "ClaimWithdrawEvent"
+  | "WithdrawEvent"
   | "PullEvent"
   | "PushEvent"
   | "ReportNavEvent"
   | "SetBackendEvent"
   | "SetAdminEvent"
+  | "SetOperatorWalletEvent"
+  | "SetFeeRecipientEvent"
   | "SetBucketParamsEvent"
-  | "SetPauseEvent";
+  | "SetPauseEvent"
+  | "SetDepositsOpenEvent"
+  | "SetClaimsOpenEvent"
+  // V5
+  | "SetFeesEvent"
+  | "FeeScheduleInitializedEvent"
+  | "FeesDistributedEvent"
+  | "PushStoreEvent";
 
 export type EventHandler<T = any> = (event: T, slot: number, signature: string) => void;
 
@@ -32,12 +40,8 @@ export class EventsApi {
     return this.on("DepositEvent", handler);
   }
 
-  onRequestWithdraw(handler: EventHandler) {
-    return this.on("RequestWithdrawEvent", handler);
-  }
-
-  onClaimWithdraw(handler: EventHandler) {
-    return this.on("ClaimWithdrawEvent", handler);
+  onWithdraw(handler: EventHandler) {
+    return this.on("WithdrawEvent", handler);
   }
 
   onPull(handler: EventHandler) {
@@ -50,5 +54,14 @@ export class EventsApi {
 
   onReportNav(handler: EventHandler) {
     return this.on("ReportNavEvent", handler);
+  }
+
+  // V5 helpers
+  onSetFees(handler: EventHandler) {
+    return this.on("SetFeesEvent", handler);
+  }
+
+  onFeesDistributed(handler: EventHandler) {
+    return this.on("FeesDistributedEvent", handler);
   }
 }
