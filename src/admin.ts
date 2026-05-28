@@ -1,4 +1,5 @@
 import * as anchor from "@coral-xyz/anchor";
+import { BN } from "@coral-xyz/anchor";
 import {
   AccountMeta,
   PublicKey,
@@ -215,6 +216,50 @@ export class AdminApi {
   }
 
   /**
+   * Narrow admin setter for the performance fee bps. Default for V5 is 0.
+   * Bumps blocked while `claims_open == true` (raising is gated; lowering OK).
+   * Bps capped at MAX_PERFORMANCE_FEE_BPS (5000).
+   */
+  async setPerfFee(args: {
+    bucket: Bucket;
+    performanceFeeBps: number;
+    admin: Signer;
+  }): Promise<string> {
+    const [bucketPda] = findBucket(this.c.programId, args.bucket);
+    return this.c.program.methods
+      .setPerfFee(args.performanceFeeBps)
+      .accountsPartial({
+        config: this.c.configPda,
+        admin: args.admin.publicKey,
+        bucket: bucketPda,
+      })
+      .signers([args.admin])
+      .rpc();
+  }
+
+  /**
+   * Audit C3 — bounded admin write-off of `bucket.external_value`. Per-call
+   * bound is `MAX_WRITE_OFF_BPS` (5%) of CURRENT external_value AND rate-
+   * limited by `min_nav_update_interval`. Blocked while `claims_open == true`.
+   */
+  async adminWriteOff(args: {
+    bucket: Bucket;
+    amount: BN;
+    admin: Signer;
+  }): Promise<string> {
+    const [bucketPda] = findBucket(this.c.programId, args.bucket);
+    return this.c.program.methods
+      .adminWriteOff(args.amount)
+      .accountsPartial({
+        config: this.c.configPda,
+        admin: args.admin.publicKey,
+        bucket: bucketPda,
+      })
+      .signers([args.admin])
+      .rpc();
+  }
+
+  /**
    * One-time init of the global fee schedule. Both splits must sum to
    * exactly 10000 bps over non-empty slots; empty slots must have
    * recipient=PublicKey.default() AND bpsShare=0.
@@ -241,6 +286,35 @@ export class AdminApi {
         feeSchedule,
         feeBucket,
         systemProgram: SystemProgram.programId,
+      })
+      .signers([args.admin])
+      .rpc();
+  }
+
+  /**
+   * Audit C2 — admin update of an already-initialised fee schedule.
+   * Preserves `genesis_ts` so the year-one switchover clock is not reset.
+   * Both arrays must sum to exactly 10000 bps over non-empty slots.
+   */
+  async setFeeSchedule(args: {
+    genesis: FeeRecipientInput[];
+    yearOne: FeeRecipientInput[];
+    admin: Signer;
+  }): Promise<string> {
+    const [feeSchedule] = findFeeSchedule(this.c.programId);
+    const pad = (xs: FeeRecipientInput[]): FeeRecipientInput[] => {
+      const arr = xs.slice(0, MAX_FEE_RECIPIENTS);
+      while (arr.length < MAX_FEE_RECIPIENTS) {
+        arr.push({ recipient: PublicKey.default, bpsShare: 0 });
+      }
+      return arr;
+    };
+    return this.c.program.methods
+      .setFeeSchedule(pad(args.genesis) as any, pad(args.yearOne) as any)
+      .accountsPartial({
+        config: this.c.configPda,
+        admin: args.admin.publicKey,
+        feeSchedule,
       })
       .signers([args.admin])
       .rpc();
