@@ -18,7 +18,9 @@ export class BackendApi {
    * increments by NET, so total NAV drops by exactly the fee — that's
    * where the user pays this volume fee, transparently, via NPS.
    *
-   * Pinned to `cfg.operator_wallet` via on-chain `has_one` constraint.
+   * Pinned to `bucket.operator_wallet` via on-chain `has_one` constraint
+   * (V5: per-bucket — each bucket has its own operator for ORE Miner PDA
+   * isolation, so Simple's hourly claim doesn't reset Refined/Ultra).
    */
   async pull(args: {
     bucket: Bucket;

@@ -24,14 +24,13 @@ export class AdminApi {
   async initialize(args: {
     admin: Signer;
     backend: PublicKey;
-    operatorWallet: PublicKey;
     feeRecipient: PublicKey;
-    /** V5 — stORE mint pinned at init. Pass PublicKey.default for environments
-     *  without ore-lst deployed (push_store + withdraw store will no-op). */
+    /** V5 — stORE mint pinned at init. Must be a real SPL mint
+     *  (Pubkey::default() is rejected — see audit C1). */
     storeMint: PublicKey;
   }): Promise<string> {
     return this.c.program.methods
-      .initialize(args.backend, args.operatorWallet, args.feeRecipient, args.storeMint)
+      .initialize(args.backend, args.feeRecipient, args.storeMint)
       .accountsPartial({
         config: this.c.configPda,
         admin: args.admin.publicKey,
@@ -41,16 +40,23 @@ export class AdminApi {
       .rpc();
   }
 
+  /**
+   * V5 — `operatorWallet` is now PER-BUCKET (pinned at init time, mutable
+   * via `setBucketOperator`). Each bucket having its own operator gives
+   * it its own ORE Miner PDA, so `claim_ore` cadence + refining-yield
+   * accumulation are isolated across Simple / Refined / Ultra.
+   */
   async initBucket(args: {
     bucketId: number;
     params: BucketParamsInput;
+    operatorWallet: PublicKey;
     admin: Signer;
   }): Promise<string> {
     const addrs = deriveBucketAddresses(this.c.programId, args.bucketId);
     // Read cfg to find the storeMint pinned at initialize-time.
     const cfg = await this.c.program.account.config.fetch(this.c.configPda);
     return this.c.program.methods
-      .initBucket(args.bucketId, args.params as any)
+      .initBucket(args.bucketId, args.params as any, args.operatorWallet)
       .accountsPartial({
         config: this.c.configPda,
         admin: args.admin.publicKey,
@@ -89,15 +95,23 @@ export class AdminApi {
       .rpc();
   }
 
-  async setOperatorWallet(args: {
-    newOperatorWallet: PublicKey;
+  /**
+   * V5 — rotate a single bucket's operator wallet. Blocked while
+   * `claims_open == true` (NAV frozen). Per-bucket: rotating Simple's
+   * operator does NOT touch Refined or Ultra.
+   */
+  async setBucketOperator(args: {
+    bucket: Bucket;
+    newOperator: PublicKey;
     admin: Signer;
   }): Promise<string> {
+    const [bucketPda] = findBucket(this.c.programId, args.bucket);
     return this.c.program.methods
-      .setOperatorWallet(args.newOperatorWallet)
+      .setBucketOperator(args.newOperator)
       .accountsPartial({
         config: this.c.configPda,
         admin: args.admin.publicKey,
+        bucket: bucketPda,
       })
       .signers([args.admin])
       .rpc();
