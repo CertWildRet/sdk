@@ -15,10 +15,11 @@
     "clean": "rm -rf dist",
     "example:deposit": "tsx examples/01-simple-deposit.ts",
     "example:autoclaim": "tsx examples/02-auto-claim.ts",
-    "example:navsub": "tsx examples/03-nav-subscriber.ts"
+    "example:navsub": "tsx examples/03-nav-subscriber.ts",
+    "prepare": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "@cwr/abi": "file:../cwr-abi",
+    "@cwr/abi": "github:CertWildRet/abi#main",
     "@coral-xyz/anchor": "^0.31.1",
     "@solana/spl-token": "^0.4.14",
     "@solana/web3.js": "^1.95.0",
