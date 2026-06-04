@@ -327,13 +327,13 @@ export class AdminApi {
   }
 
   /**
-   * One-time init of the global fee schedule. Both splits must sum to
+   * One-time init of the global fee schedule. `recipients` must sum to
    * exactly 10000 bps over non-empty slots; empty slots must have
-   * recipient=PublicKey.default() AND bpsShare=0.
+   * recipient=PublicKey.default() AND bpsShare=0. To change the split
+   * later, call `setFeeSchedule(...)`.
    */
   async initFeeSchedule(args: {
-    genesis: FeeRecipientInput[];
-    yearOne: FeeRecipientInput[];
+    recipients: FeeRecipientInput[];
     admin: Signer;
   }): Promise<string> {
     const [feeSchedule] = findFeeSchedule(this.c.programId);
@@ -346,7 +346,7 @@ export class AdminApi {
       return arr;
     };
     return this.c.program.methods
-      .initFeeSchedule(pad(args.genesis) as any, pad(args.yearOne) as any)
+      .initFeeSchedule(pad(args.recipients) as any)
       .accountsPartial({
         config: this.c.configPda,
         admin: args.admin.publicKey,
@@ -359,13 +359,15 @@ export class AdminApi {
   }
 
   /**
-   * Audit C2 — admin update of an already-initialised fee schedule.
-   * Preserves `genesis_ts` so the year-one switchover clock is not reset.
-   * Both arrays must sum to exactly 10000 bps over non-empty slots.
+   * Admin update of the fee schedule. Replaces the recipient array.
+   * `genesis_ts` is preserved unchanged (telemetry only — when the
+   * schedule was first initialized). Non-empty slots must sum to
+   * exactly 10000 bps. To migrate to a multi-sig later, rotate the
+   * admin pubkey via `setAdmin(...)` first and have the multi-sig
+   * call this method.
    */
   async setFeeSchedule(args: {
-    genesis: FeeRecipientInput[];
-    yearOne: FeeRecipientInput[];
+    recipients: FeeRecipientInput[];
     admin: Signer;
   }): Promise<string> {
     const [feeSchedule] = findFeeSchedule(this.c.programId);
@@ -377,7 +379,7 @@ export class AdminApi {
       return arr;
     };
     return this.c.program.methods
-      .setFeeSchedule(pad(args.genesis) as any, pad(args.yearOne) as any)
+      .setFeeSchedule(pad(args.recipients) as any)
       .accountsPartial({
         config: this.c.configPda,
         admin: args.admin.publicKey,

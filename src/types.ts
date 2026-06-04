@@ -32,7 +32,7 @@ export type BucketParamsInput = {
   pullFeeEnabled: boolean;
 };
 
-/** A single entry in the genesis or year-one fee-distribution split. */
+/** A single entry in the fee-distribution split. */
 export type FeeRecipientInput = {
   recipient: PublicKey;
   bpsShare: number;

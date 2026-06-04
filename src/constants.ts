@@ -39,4 +39,3 @@ export const MAX_BUCKETS = 64;
 export const MAX_FEE_RECIPIENTS = 4;
 export const MAX_ENTRY_FEE_BPS = 500;
 export const MAX_EXIT_FEE_BPS = 500;
-export const YEAR_ONE_SWITCHOVER_SECS = 365 * 86_400;
