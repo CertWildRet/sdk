@@ -28,12 +28,24 @@ export class AdminApi {
     /** V5 — stORE mint pinned at init. Must be a real SPL mint
      *  (Pubkey::default() is rejected — see audit C1). */
     storeMint: PublicKey;
+    /**
+     * External-audit hardening (2026-06): the program data account that
+     * proves `admin` is the upgrade authority for cwr_vault. Required to
+     * prevent `initialize` frontrun. Derived as:
+     *   PublicKey.findProgramAddressSync(
+     *     [programId.toBuffer()],
+     *     new PublicKey("BPFLoaderUpgradeab1e11111111111111111111111"),
+     *   )[0]
+     * Helpers: deriveProgramData(programId).
+     */
+    programData: PublicKey;
   }): Promise<string> {
     return this.c.program.methods
       .initialize(args.backend, args.feeRecipient, args.storeMint)
       .accountsPartial({
         config: this.c.configPda,
         admin: args.admin.publicKey,
+        programData: args.programData,
         systemProgram: SystemProgram.programId,
       })
       .signers([args.admin])
@@ -84,9 +96,61 @@ export class AdminApi {
       .rpc();
   }
 
-  async setAdmin(args: { newAdmin: PublicKey; admin: Signer }): Promise<string> {
+  // ─── Two-step admin handover (external-audit hardening, 2026-06) ────────
+  //
+  // The single-call `setAdmin` was removed. Rotation now requires three
+  // independent actions within 24h of the proposal:
+  //   1) proposeAdmin(newAdmin)           current admin signs
+  //   2) confirmAdminTransfer()           hardcoded ADMIN_TRANSFER_CONFIRMER
+  //                                       signs + deposits 0.1 SOL into fee_bucket
+  //   3) acceptAdmin()                    new admin signs to commit
+  // Any pending proposal can be revoked via cancelAdminTransfer().
+  //
+  // The ADMIN_TRANSFER_CONFIRMER private key is intentionally off-the-books;
+  // calling step (2) requires its signer to be loaded by the caller.
+
+  async proposeAdmin(args: { newAdmin: PublicKey; admin: Signer }): Promise<string> {
     return this.c.program.methods
-      .setAdmin(args.newAdmin)
+      .proposeAdmin(args.newAdmin)
+      .accountsPartial({
+        config: this.c.configPda,
+        admin: args.admin.publicKey,
+      })
+      .signers([args.admin])
+      .rpc();
+  }
+
+  async confirmAdminTransfer(args: { confirmer: Signer }): Promise<string> {
+    const { findFeeBucket, findFeeSchedule } = await import("./pdas");
+    const [feeBucket] = findFeeBucket(this.c.programId);
+    const [feeSchedule] = findFeeSchedule(this.c.programId);
+    return this.c.program.methods
+      .confirmAdminTransfer()
+      .accountsPartial({
+        config: this.c.configPda,
+        confirmer: args.confirmer.publicKey,
+        feeBucket,
+        feeSchedule,
+        systemProgram: SystemProgram.programId,
+      })
+      .signers([args.confirmer])
+      .rpc();
+  }
+
+  async acceptAdmin(args: { newAdmin: Signer }): Promise<string> {
+    return this.c.program.methods
+      .acceptAdmin()
+      .accountsPartial({
+        config: this.c.configPda,
+        newAdmin: args.newAdmin.publicKey,
+      })
+      .signers([args.newAdmin])
+      .rpc();
+  }
+
+  async cancelAdminTransfer(args: { admin: Signer }): Promise<string> {
+    return this.c.program.methods
+      .cancelAdminTransfer()
       .accountsPartial({
         config: this.c.configPda,
         admin: args.admin.publicKey,

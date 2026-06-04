@@ -39,3 +39,21 @@ export const MAX_BUCKETS = 64;
 export const MAX_FEE_RECIPIENTS = 4;
 export const MAX_ENTRY_FEE_BPS = 500;
 export const MAX_EXIT_FEE_BPS = 500;
+
+// ─── Two-step admin handover (2026-06) ──────────────────────────────────
+
+/** Pubkey hardcoded into the on-chain contract. The only signer allowed
+ *  to invoke `confirm_admin_transfer`. Held offline by the protocol
+ *  owner; never published anywhere except in this constant. */
+export const ADMIN_TRANSFER_CONFIRMER = new (require("@solana/web3.js").PublicKey)(
+  "9T6bE4qzmnSzLgH9LFuV5S5wLab5QTtMBcvREg5gWBUb",
+);
+
+/** Lamports the confirmer must deposit on `confirm_admin_transfer`.
+ *  Routed to the global fee_bucket; not burned. */
+export const ADMIN_TRANSFER_CONFIRMATION_LAMPORTS = new BN(100_000_000);
+
+/** Seconds within which `confirm_admin_transfer` + `accept_admin` must
+ *  occur after the original `propose_admin` call (else the proposal
+ *  silently expires and must be re-proposed). */
+export const ADMIN_TRANSFER_TIMEOUT_SECS = 86_400; // 24 hours

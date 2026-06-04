@@ -13,6 +13,21 @@ export function findConfig(programId: PublicKey): [PublicKey, number] {
   return PublicKey.findProgramAddressSync([CONFIG_SEED], programId);
 }
 
+/**
+ * External-audit hardening (2026-06): derive the BPFLoaderUpgradeable
+ * ProgramData PDA for a given program id. Required by `initialize()` so
+ * the contract can verify the caller is the upgrade authority.
+ */
+const BPF_LOADER_UPGRADEABLE = new PublicKey(
+  "BPFLoaderUpgradeab1e11111111111111111111111",
+);
+export function deriveProgramData(programId: PublicKey): PublicKey {
+  return PublicKey.findProgramAddressSync(
+    [programId.toBuffer()],
+    BPF_LOADER_UPGRADEABLE,
+  )[0];
+}
+
 export function findBucket(programId: PublicKey, bucketId: number): [PublicKey, number] {
   return PublicKey.findProgramAddressSync(
     [BUCKET_SEED, Buffer.from([bucketId])],
