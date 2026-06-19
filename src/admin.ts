@@ -205,6 +205,35 @@ export class AdminApi {
       .rpc();
   }
 
+  /**
+   * Admin-tunable per-bucket window timing — change OPEN/BETTING window
+   * lengths + the crank guard band without a program upgrade. Validated
+   * on-chain (durations in [30s, 7d]; guard band must leave >= ~1 ORE round
+   * crankable). All values in their native units: seconds / seconds / slots.
+   */
+  async setBucketWindowTiming(args: {
+    bucket: Bucket;
+    openSecs: anchor.BN | number;
+    bettingSecs: anchor.BN | number;
+    guardBandSlots: anchor.BN | number;
+    admin: Signer;
+  }): Promise<string> {
+    const [bucketPda] = findBucket(this.c.programId, args.bucket);
+    return this.c.program.methods
+      .setBucketWindowTiming(
+        new anchor.BN(args.openSecs.toString()),
+        new anchor.BN(args.bettingSecs.toString()),
+        new anchor.BN(args.guardBandSlots.toString()),
+      )
+      .accountsPartial({
+        config: this.c.configPda,
+        admin: args.admin.publicKey,
+        bucket: bucketPda,
+      })
+      .signers([args.admin])
+      .rpc();
+  }
+
   async setFeeRecipient(args: {
     newFeeRecipient: PublicKey;
     admin: Signer;
