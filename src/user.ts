@@ -15,6 +15,9 @@ import {
   deriveBucketAddresses,
   findFeeBucket,
   findFeeSchedule,
+  findMiningAuthority,
+  findPosition,
+  oreMinerPda,
 } from "./pdas";
 
 export class UserApi {
@@ -25,6 +28,15 @@ export class UserApi {
    * Creates the user's share-token ATA idempotently if missing. The V5
    * entry-fee is skimmed by the program from `amount` into the global fee
    * bucket BEFORE shares are minted (so shares reflect the net deposited).
+   *
+   * V6 — also threads the per-user Position PDA (created lazily on first
+   * deposit) and the ORE Miner read account, which the handler uses for the
+   * derived NAV. The miner is read-only; it need not exist before
+   * `init_mining_pda` (validated in-handler only when mining is initialized).
+   *
+   * Wires Deposit: config, bucket, treasury, share_mint, user_share_ata, user,
+   * position, ore_miner, fee_bucket, fee_schedule, token_program,
+   * system_program.
    */
   async deposit(args: {
     bucket: Bucket;
@@ -34,6 +46,9 @@ export class UserApi {
     const addrs = deriveBucketAddresses(this.c.programId, args.bucket);
     const [feeSchedule] = findFeeSchedule(this.c.programId);
     const [feeBucket] = findFeeBucket(this.c.programId);
+    const [position] = findPosition(this.c.programId, args.bucket, args.user.publicKey);
+    const [miningAuthority] = findMiningAuthority(this.c.programId, args.bucket);
+    const [oreMiner] = oreMinerPda(miningAuthority);
     const userAta = getAssociatedTokenAddressSync(addrs.shareMint, args.user.publicKey);
 
     const ataInfo = await this.c.connection.getAccountInfo(userAta);
@@ -52,11 +67,14 @@ export class UserApi {
     return this.c.program.methods
       .deposit(args.amount)
       .accountsPartial({
+        config: this.c.configPda,
         bucket: addrs.bucket,
         treasury: addrs.treasury,
         shareMint: addrs.shareMint,
         userShareAta: userAta,
         user: args.user.publicKey,
+        position,
+        oreMiner,
         feeBucket,
         feeSchedule,
         tokenProgram: TOKEN_PROGRAM_ID,
@@ -68,9 +86,14 @@ export class UserApi {
   }
 
   /**
-   * Burn shares and withdraw the underlying SOL payout, minus the
-   * performance fee (legacy → `cfg.fee_recipient`) and V5 flat exit fee
-   * (→ global fee bucket). Only callable while `claims_open` on the bucket.
+   * Burn shares and withdraw the underlying SOL payout, minus the V5 flat exit
+   * fee (→ global fee bucket). Also pays out the pro-rata stORE held in the
+   * bucket's store_treasury into the user's stORE ATA. Only callable while
+   * `claims_open` on the bucket.
+   *
+   * Wires Withdraw: bucket, treasury, share_mint, user_share_ata, user,
+   * position, fee_bucket, fee_schedule, config, store_treasury, user_store_ata,
+   * store_mint, token_program, system_program.
    */
   async withdraw(args: {
     bucket: Bucket;
@@ -81,6 +104,7 @@ export class UserApi {
     const userShareAta = getAssociatedTokenAddressSync(addrs.shareMint, args.user.publicKey);
     const [feeSchedule] = findFeeSchedule(this.c.programId);
     const [feeBucket] = findFeeBucket(this.c.programId);
+    const [position] = findPosition(this.c.programId, args.bucket, args.user.publicKey);
     const cfg = await this.c.program.account.config.fetch(this.c.configPda);
     const userStoreAta = getAssociatedTokenAddressSync(cfg.storeMint, args.user.publicKey);
 
@@ -105,9 +129,9 @@ export class UserApi {
         bucket: addrs.bucket,
         treasury: addrs.treasury,
         shareMint: addrs.shareMint,
-        userShareAta: userShareAta,
+        userShareAta,
         user: args.user.publicKey,
-        feeRecipient: cfg.feeRecipient,
+        position,
         feeBucket,
         feeSchedule,
         config: this.c.configPda,

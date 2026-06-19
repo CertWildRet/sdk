@@ -1,9 +1,25 @@
+import BN from "bn.js";
 import { PublicKey } from "@solana/web3.js";
 import {
   BUCKET_SEED,
   CONFIG_SEED,
   FEE_BUCKET_SEED,
   FEE_SCHEDULE_SEED,
+  MINING_SEED,
+  ORE_LST_PROGRAM_ID,
+  ORE_LST_SEED_VAULT,
+  ORE_PROGRAM_ID,
+  ORE_SEED_AUTOMATION,
+  ORE_SEED_BOARD,
+  ORE_SEED_CONFIG,
+  ORE_SEED_MINER,
+  ORE_SEED_ROUND,
+  ORE_SEED_TREASURY,
+  ORE_STAKE_PROGRAM_ID,
+  ORE_STAKE_SEED_STAKE,
+  ORE_STAKE_SEED_TREASURY,
+  ORE_STAKE_SEED_VESTING,
+  POSITION_SEED,
   SHARE_MINT_SEED,
   STORE_TREASURY_SEED,
   TREASURY_SEED,
@@ -85,4 +101,117 @@ export function deriveBucketAddresses(
     shareMint: findShareMint(programId, bucketId)[0],
     storeTreasury: findStoreTreasury(programId, bucketId)[0],
   };
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// V6 non-custodial mining PDAs.
+//
+// cwr-program PDAs (under `programId`):
+//   - mining authority: PDA([MINING_SEED, bucket_id])
+//   - position:         PDA([POSITION_SEED, bucket_id, user])
+//
+// External ORE / ore-lst / ore-stake PDAs — these MUST mirror
+// programs/cwr-vault/src/ore_cpi.rs EXACTLY. A wrong seed/program is a
+// runtime CPI failure on mainnet.
+// ════════════════════════════════════════════════════════════════════════
+
+/** Per-bucket mining authority PDA (== `bucket.mining_authority`). SOL source
+ *  + signer of all ORE/ore-lst CPIs. */
+export function findMiningAuthority(
+  programId: PublicKey,
+  bucketId: number,
+): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync(
+    [MINING_SEED, Buffer.from([bucketId])],
+    programId,
+  );
+}
+
+/** Per-user Position PDA (V6 share + stORE-debt watermark accounting). */
+export function findPosition(
+  programId: PublicKey,
+  bucketId: number,
+  user: PublicKey,
+): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync(
+    [POSITION_SEED, Buffer.from([bucketId]), user.toBuffer()],
+    programId,
+  );
+}
+
+// ─── ORE program PDAs (mirror ore_cpi.rs) ───────────────────────────────
+
+/** ORE Miner PDA for a mining authority (== `bucket.ore_miner`). */
+export function oreMinerPda(miningAuthority: PublicKey): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync(
+    [ORE_SEED_MINER, miningAuthority.toBuffer()],
+    ORE_PROGRAM_ID,
+  );
+}
+
+/** ORE board PDA (singleton). */
+export function oreBoardPda(): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync([ORE_SEED_BOARD], ORE_PROGRAM_ID);
+}
+
+/** ORE config PDA (singleton). */
+export function oreConfigPda(): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync([ORE_SEED_CONFIG], ORE_PROGRAM_ID);
+}
+
+/** ORE treasury PDA (singleton). */
+export function oreTreasuryPda(): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync([ORE_SEED_TREASURY], ORE_PROGRAM_ID);
+}
+
+/** ORE automation PDA for a mining authority. */
+export function oreAutomationPda(miningAuthority: PublicKey): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync(
+    [ORE_SEED_AUTOMATION, miningAuthority.toBuffer()],
+    ORE_PROGRAM_ID,
+  );
+}
+
+/** ORE round PDA for a given round id (u64 LE). */
+export function oreRoundPda(roundId: BN): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync(
+    [ORE_SEED_ROUND, roundId.toArrayLike(Buffer, "le", 8)],
+    ORE_PROGRAM_ID,
+  );
+}
+
+// ─── ore-lst / ore-stake PDAs (mirror ore_cpi.rs) ───────────────────────
+
+/** ore-lst vault PDA. Derives to 7taXpXz6eqYzscXEi1d1fgwATQMqAR6Nku9pJCjb8gQN. */
+export function oreLstVaultPda(): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync(
+    [ORE_LST_SEED_VAULT],
+    ORE_LST_PROGRAM_ID,
+  );
+}
+
+/** ore-stake stake PDA (seeds [b"stake", vault]). Derives to
+ *  DfdZYzgLuqRickq57fyb4dX88VgPkhoEs1uuBKdxzaaJ for the mainnet vault. */
+export function oreStakeStakePda(vault: PublicKey): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync(
+    [ORE_STAKE_SEED_STAKE, vault.toBuffer()],
+    ORE_STAKE_PROGRAM_ID,
+  );
+}
+
+/** ore-stake treasury PDA. Derives to ANX3pRkcGipsZjcWVBvRaHFasBMw8FDPBvJHoubpWym6. */
+export function oreStakeTreasuryPda(): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync(
+    [ORE_STAKE_SEED_TREASURY],
+    ORE_STAKE_PROGRAM_ID,
+  );
+}
+
+/** ore-stake vesting PDA (Wrap account [12], re-added Jun-17-2026).
+ *  MUST derive to 8QSVpUWkRBmX6yUdAqUCcaZzj6JwNJoctSRcR1AYE8f3. */
+export function oreStakeVestingPda(): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync(
+    [ORE_STAKE_SEED_VESTING],
+    ORE_STAKE_PROGRAM_ID,
+  );
 }

@@ -1,5 +1,5 @@
 import BN from "bn.js";
-import { PublicKey } from "@solana/web3.js";
+import { AccountInfo, PublicKey } from "@solana/web3.js";
 import { getAccount, getAssociatedTokenAddressSync, getMint } from "@solana/spl-token";
 import { Bucket } from "./constants";
 import { CwrVaultClient } from "./client";
@@ -7,8 +7,10 @@ import {
   findBucket,
   findFeeBucket,
   findFeeSchedule,
+  findMiningAuthority,
   findShareMint,
   findTreasury,
+  oreMinerPda,
 } from "./pdas";
 import {
   navPerShare as computeNavPerShare,
@@ -98,6 +100,20 @@ export class ReadApi {
     const snap = await this.navSnapshot(bucket);
     if (!snap) throw new Error(`Bucket ${bucket} not initialized`);
     return payoutForShares(shares, snap.totalShares, snap.totalNav);
+  }
+
+  /**
+   * V6 — raw ORE Miner account for a bucket's mining authority. NAV is now
+   * derived on-chain from this account (no more `report_nav`); this helper
+   * returns the raw account info so a caller can decode the documented miner
+   * byte layout off-chain (len 544, disc 103 — see ore_cpi.rs offsets) if it
+   * needs to mirror the on-chain derived NAV. Returns null before
+   * `init_mining_pda` / first deploy creates the miner.
+   */
+  async oreMiner(bucket: Bucket): Promise<AccountInfo<Buffer> | null> {
+    const [miningAuthority] = findMiningAuthority(this.c.programId, bucket);
+    const [miner] = oreMinerPda(miningAuthority);
+    return this.c.connection.getAccountInfo(miner);
   }
 
   /** V5 — fetch the global fee schedule. */

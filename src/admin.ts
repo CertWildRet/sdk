@@ -1,5 +1,4 @@
 import * as anchor from "@coral-xyz/anchor";
-import { BN } from "@coral-xyz/anchor";
 import {
   AccountMeta,
   PublicKey,
@@ -15,6 +14,7 @@ import {
   findBucket,
   findFeeBucket,
   findFeeSchedule,
+  findMiningAuthority,
 } from "./pdas";
 import type { BucketParamsInput, FeeRecipientInput } from "./types";
 
@@ -80,6 +80,30 @@ export class AdminApi {
         tokenProgram: TOKEN_PROGRAM_ID,
         systemProgram: SystemProgram.programId,
         rent: anchor.web3.SYSVAR_RENT_PUBKEY,
+      })
+      .signers([args.admin])
+      .rpc();
+  }
+
+  /**
+   * V6 — one-time init of a bucket's per-bucket mining authority PDA. Derives
+   * `mining_authority` (and, on-chain, the ORE Miner key it stores on the
+   * bucket). Admin-signed.
+   *
+   * Wires InitMiningPda: config, admin, bucket, mining_authority,
+   * system_program.
+   */
+  async initMiningPda(args: { bucket: Bucket; admin: Signer }): Promise<string> {
+    const [bucketPda] = findBucket(this.c.programId, args.bucket);
+    const [miningAuthority] = findMiningAuthority(this.c.programId, args.bucket);
+    return this.c.program.methods
+      .initMiningPda()
+      .accountsPartial({
+        config: this.c.configPda,
+        admin: args.admin.publicKey,
+        bucket: bucketPda,
+        miningAuthority,
+        systemProgram: SystemProgram.programId,
       })
       .signers([args.admin])
       .rpc();
@@ -359,28 +383,6 @@ export class AdminApi {
     const [bucketPda] = findBucket(this.c.programId, args.bucket);
     return this.c.program.methods
       .setPerfFee(args.performanceFeeBps)
-      .accountsPartial({
-        config: this.c.configPda,
-        admin: args.admin.publicKey,
-        bucket: bucketPda,
-      })
-      .signers([args.admin])
-      .rpc();
-  }
-
-  /**
-   * Audit C3 — bounded admin write-off of `bucket.external_value`. Per-call
-   * bound is `MAX_WRITE_OFF_BPS` (5%) of CURRENT external_value AND rate-
-   * limited by `min_nav_update_interval`. Blocked while `claims_open == true`.
-   */
-  async adminWriteOff(args: {
-    bucket: Bucket;
-    amount: BN;
-    admin: Signer;
-  }): Promise<string> {
-    const [bucketPda] = findBucket(this.c.programId, args.bucket);
-    return this.c.program.methods
-      .adminWriteOff(args.amount)
       .accountsPartial({
         config: this.c.configPda,
         admin: args.admin.publicKey,
