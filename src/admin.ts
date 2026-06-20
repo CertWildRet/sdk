@@ -47,7 +47,6 @@ export class AdminApi {
 
   async initialize(args: {
     admin: Signer;
-    backend: PublicKey;
     feeRecipient: PublicKey;
     /** V5 — stORE mint pinned at init. Must be a real SPL mint
      *  (Pubkey::default() is rejected — see audit C1). */
@@ -65,7 +64,7 @@ export class AdminApi {
     programData: PublicKey;
   }): Promise<string> {
     return this.c.program.methods
-      .initialize(args.backend, args.feeRecipient, args.storeMint)
+      .initialize(args.feeRecipient, args.storeMint)
       .accountsPartial({
         config: this.c.configPda,
         admin: args.admin.publicKey,
@@ -134,22 +133,6 @@ export class AdminApi {
         bucket: bucketPda,
         miningAuthority,
         systemProgram: SystemProgram.programId,
-        instructions: SYSVAR_INSTRUCTIONS_PUBKEY,
-      })
-      .instruction();
-    return this.cosign(ix, args.feeCosigner, args.admin);
-  }
-
-  async setBackend(args: {
-    newBackend: PublicKey;
-    admin: Signer;
-    feeCosigner: FeeCosigner;
-  }): Promise<string> {
-    const ix = await this.c.program.methods
-      .setBackend(args.newBackend)
-      .accountsPartial({
-        config: this.c.configPda,
-        admin: args.admin.publicKey,
         instructions: SYSVAR_INSTRUCTIONS_PUBKEY,
       })
       .instruction();

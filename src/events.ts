@@ -6,7 +6,6 @@ export type CwrEventName =
   | "BucketInitializedEvent"
   | "DepositEvent"
   | "WithdrawEvent"
-  | "SetBackendEvent"
   | "SetBucketOperatorEvent"
   | "SetFeeRecipientEvent"
   | "SetBucketParamsEvent"

@@ -3,7 +3,8 @@
 
 export enum CwrErrorCode {
   NotAdmin = 6000,
-  NotBackend = 6001,
+  /** Reserved (was V5 NotBackend; kept so later codes don't renumber). */
+  ReservedRoleErr = 6001,
   NotOperator = 6002,
   BucketPaused = 6003,
   BucketAlreadyInitialized = 6004,
@@ -41,7 +42,7 @@ export enum CwrErrorCode {
 
 export const CWR_ERROR_NAMES: Record<number, string> = {
   6000: "NotAdmin",
-  6001: "NotBackend",
+  6001: "ReservedRoleErr",
   6002: "NotOperator",
   6003: "BucketPaused",
   6004: "BucketAlreadyInitialized",

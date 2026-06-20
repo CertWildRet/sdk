@@ -56,7 +56,7 @@ async function main() {
         .div(snap.totalShares);
       if (snap.solInVault.lt(owed)) {
         console.log(
-          `[${BUCKET_LABELS[bucket]}] vault short (${snap.solInVault} < ${owed}) — waiting for backend top-up`,
+          `[${BUCKET_LABELS[bucket]}] vault short (${snap.solInVault} < ${owed}) — waiting for operator top-up`,
         );
         continue;
       }

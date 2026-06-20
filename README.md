@@ -46,7 +46,7 @@ cwr-abi (canonical IDL + types)        ← published as @cwr/abi
         ↓ imports
 cwr-sdk (this package)                 ← published as @cwr/sdk
         ↓ imports
-   consumers (backend, frontend, third-party automators)
+   consumers (crank operator, frontend, third-party automators)
 ```
 
 ## API surface
@@ -61,21 +61,25 @@ The SDK is grouped by who can actually call each instruction:
 | `requestWithdraw({ bucket, shares, user })` | Escrows shares, starts lockup timer. |
 | `claimWithdraw({ bucket, user })` | Burns shares, pays SOL at live NAV. Reverts with `InsufficientVaultSol` if treasury underfunded. |
 
-### `vault.backend.*` — only the backend authority (registered in `Config.backend`)
+### `vault.backend.*` — the crank / operator surface  _(namespace rename to `vault.crank.*` pending)_
+
+`crankMine` is signed by the bucket operator; the window/round pokes are
+permissionless (the operator key fee-pays them — there is no separate backend key).
 
 | Method | Notes |
 |---|---|
-| `pull({ bucket, amount, backend, operator })` | Treasury → operator wallet. NAV unchanged. |
-| `push({ bucket, amount, operator })` | Operator → treasury. Saturating-sub external_value. |
-| `reportNav({ bucket, externalValue, backend })` | Marks off-vault holdings. Rate-limited + bounded. |
+| `crankMine({ bucket, amount, operator })` | Deploy SOL uniformly across all 25 ORE squares (BETTING phase, outside the guard band). |
+| `checkpoint({ bucket, caller })` | Permissionless ORE Checkpoint CPI — settle the round. |
+| `openWindow({ bucket, caller })` | BETTING → OPEN once the betting window elapses and the round is settled. |
+| `closeWindow({ bucket, caller })` | OPEN → BETTING once the open window elapses. |
+| `settleHarvest({ bucket, caller })` | Claim all SOL+ORE, wrap → stORE, advance the accumulator (first OPEN-window action). |
 
 ### `vault.admin.*` — only the admin authority (registered in `Config.admin`)
 
 | Method | Notes |
 |---|---|
-| `initialize({ admin, backend, feeRecipient })` | One-shot config creation. |
+| `initialize({ admin, feeRecipient, storeMint })` | One-shot config creation. |
 | `initBucket({ bucketId, params, admin })` | Spin up a tranche (PDA + treasury + mint + escrow). |
-| `setBackend({ newBackend, admin })` | Rotate backend authority. |
 | `setAdmin({ newAdmin, admin })` | Transfer admin role. |
 | `setFeeRecipient({ newFeeRecipient, admin })` | Update fee destination. |
 | `setBucketParams({ bucket, params, admin })` | Retune lockup, fees, jump bounds. |
@@ -133,7 +137,7 @@ try {
 } catch (err) {
   const cwrErr = decodeCwrError(err);
   if (cwrErr?.code === CwrErrorCode.InsufficientVaultSol) {
-    console.log("Wait for backend top-up and retry");
+    console.log("Wait for operator top-up and retry");
   } else if (cwrErr?.code === CwrErrorCode.LockupActive) {
     console.log("Still locked, come back later");
   } else {
@@ -147,7 +151,6 @@ try {
 - [`01-simple-deposit.ts`](examples/01-simple-deposit.ts) — single deposit
 - [`02-auto-claim.ts`](examples/02-auto-claim.ts) — watcher that auto-claims unlocked requests
 - [`03-nav-subscriber.ts`](examples/03-nav-subscriber.ts) — dashboard / event tape
-- [`04-backend-loop.ts`](examples/04-backend-loop.ts) — internal backend skeleton
 
 Run with `npx tsx examples/01-simple-deposit.ts`.
 
