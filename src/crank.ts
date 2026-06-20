@@ -48,7 +48,7 @@ const ALL_SQUARES: boolean[] = Array.from({ length: 25 }, () => true);
  * cwr/ORE PDAs; the externally-keyed accounts (ATAs, vault-seeded stake PDA,
  * mints, programs, signers) are supplied explicitly.
  */
-export class BackendApi {
+export class CrankApi {
   constructor(private readonly c: CwrVaultClient) {}
 
   /**

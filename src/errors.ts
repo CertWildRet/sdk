@@ -3,7 +3,7 @@
 
 export enum CwrErrorCode {
   NotAdmin = 6000,
-  /** Reserved (was V5 NotBackend; kept so later codes don't renumber). */
+  /** Reserved slot for a removed V5 role error; kept so later codes don't renumber. */
   ReservedRoleErr = 6001,
   NotOperator = 6002,
   BucketPaused = 6003,

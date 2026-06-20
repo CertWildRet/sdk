@@ -6,7 +6,7 @@ export * from "./types";
 export { CwrVaultClient } from "./client";
 export type { CwrVaultConfig } from "./client";
 export { UserApi } from "./user";
-export { BackendApi } from "./backend";
+export { CrankApi } from "./crank";
 export { AdminApi } from "./admin";
 export { ReadApi } from "./read";
 export type { NavSnapshot } from "./read";
@@ -15,7 +15,7 @@ export type { CwrEventName, EventHandler, Unsubscribe } from "./events";
 
 import { CwrVaultClient, CwrVaultConfig } from "./client";
 import { UserApi } from "./user";
-import { BackendApi } from "./backend";
+import { CrankApi } from "./crank";
 import { AdminApi } from "./admin";
 import { ReadApi } from "./read";
 import { EventsApi } from "./events";
@@ -32,7 +32,7 @@ import { EventsApi } from "./events";
 export class CwrVault {
   readonly client: CwrVaultClient;
   readonly user: UserApi;
-  readonly backend: BackendApi;
+  readonly crank: CrankApi;
   readonly admin: AdminApi;
   readonly read: ReadApi;
   readonly events: EventsApi;
@@ -40,7 +40,7 @@ export class CwrVault {
   constructor(cfg: CwrVaultConfig) {
     this.client = new CwrVaultClient(cfg);
     this.user = new UserApi(this.client);
-    this.backend = new BackendApi(this.client);
+    this.crank = new CrankApi(this.client);
     this.admin = new AdminApi(this.client);
     this.read = new ReadApi(this.client);
     this.events = new EventsApi(this.client);

@@ -61,10 +61,10 @@ The SDK is grouped by who can actually call each instruction:
 | `requestWithdraw({ bucket, shares, user })` | Escrows shares, starts lockup timer. |
 | `claimWithdraw({ bucket, user })` | Burns shares, pays SOL at live NAV. Reverts with `InsufficientVaultSol` if treasury underfunded. |
 
-### `vault.backend.*` — the crank / operator surface  _(namespace rename to `vault.crank.*` pending)_
+### `vault.crank.*` — the crank / operator surface
 
 `crankMine` is signed by the bucket operator; the window/round pokes are
-permissionless (the operator key fee-pays them — there is no separate backend key).
+permissionless (the operator key fee-pays them — there is no separate signer key).
 
 | Method | Notes |
 |---|---|
