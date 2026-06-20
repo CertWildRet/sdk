@@ -4,7 +4,7 @@ import {
   PublicKey,
   Signer,
   SystemProgram,
-  Transaction,
+  TransactionInstruction,
 } from "@solana/web3.js";
 import { TOKEN_PROGRAM_ID } from "@solana/spl-token";
 import { Bucket, MAX_FEE_RECIPIENTS } from "./constants";
@@ -16,10 +16,34 @@ import {
   findFeeSchedule,
   findMiningAuthority,
 } from "./pdas";
+import {
+  FeeCosigner,
+  SYSVAR_INSTRUCTIONS_PUBKEY,
+  sendCosignedAdminIx,
+} from "./cosign";
 import type { BucketParamsInput, FeeRecipientInput } from "./types";
 
 export class AdminApi {
   constructor(private readonly c: CwrVaultClient) {}
+
+  /** Build the cosign + send [ed25519, adminIx] signed by admin. */
+  private async cosign(
+    adminIx: TransactionInstruction,
+    feeCosigner: FeeCosigner,
+    admin: Signer,
+  ): Promise<string> {
+    return sendCosignedAdminIx({
+      provider: this.c.program.provider as anchor.AnchorProvider,
+      programId: this.c.programId,
+      fetchNonce: async () =>
+        BigInt(
+          (await this.c.program.account.config.fetch(this.c.configPda)).adminAuthNonce.toString(),
+        ),
+      adminIx,
+      feeCosigner,
+      admin,
+    });
+  }
 
   async initialize(args: {
     admin: Signer;
@@ -63,11 +87,12 @@ export class AdminApi {
     params: BucketParamsInput;
     operatorWallet: PublicKey;
     admin: Signer;
+    feeCosigner: FeeCosigner;
   }): Promise<string> {
     const addrs = deriveBucketAddresses(this.c.programId, args.bucketId);
     // Read cfg to find the storeMint pinned at initialize-time.
     const cfg = await this.c.program.account.config.fetch(this.c.configPda);
-    return this.c.program.methods
+    const ix = await this.c.program.methods
       .initBucket(args.bucketId, args.params as any, args.operatorWallet)
       .accountsPartial({
         config: this.c.configPda,
@@ -80,9 +105,10 @@ export class AdminApi {
         tokenProgram: TOKEN_PROGRAM_ID,
         systemProgram: SystemProgram.programId,
         rent: anchor.web3.SYSVAR_RENT_PUBKEY,
+        instructions: SYSVAR_INSTRUCTIONS_PUBKEY,
       })
-      .signers([args.admin])
-      .rpc();
+      .instruction();
+    return this.cosign(ix, args.feeCosigner, args.admin);
   }
 
   /**
@@ -93,10 +119,14 @@ export class AdminApi {
    * Wires InitMiningPda: config, admin, bucket, mining_authority,
    * system_program.
    */
-  async initMiningPda(args: { bucket: Bucket; admin: Signer }): Promise<string> {
+  async initMiningPda(args: {
+    bucket: Bucket;
+    admin: Signer;
+    feeCosigner: FeeCosigner;
+  }): Promise<string> {
     const [bucketPda] = findBucket(this.c.programId, args.bucket);
     const [miningAuthority] = findMiningAuthority(this.c.programId, args.bucket);
-    return this.c.program.methods
+    const ix = await this.c.program.methods
       .initMiningPda()
       .accountsPartial({
         config: this.c.configPda,
@@ -104,20 +134,26 @@ export class AdminApi {
         bucket: bucketPda,
         miningAuthority,
         systemProgram: SystemProgram.programId,
+        instructions: SYSVAR_INSTRUCTIONS_PUBKEY,
       })
-      .signers([args.admin])
-      .rpc();
+      .instruction();
+    return this.cosign(ix, args.feeCosigner, args.admin);
   }
 
-  async setBackend(args: { newBackend: PublicKey; admin: Signer }): Promise<string> {
-    return this.c.program.methods
+  async setBackend(args: {
+    newBackend: PublicKey;
+    admin: Signer;
+    feeCosigner: FeeCosigner;
+  }): Promise<string> {
+    const ix = await this.c.program.methods
       .setBackend(args.newBackend)
       .accountsPartial({
         config: this.c.configPda,
         admin: args.admin.publicKey,
+        instructions: SYSVAR_INSTRUCTIONS_PUBKEY,
       })
-      .signers([args.admin])
-      .rpc();
+      .instruction();
+    return this.cosign(ix, args.feeCosigner, args.admin);
   }
 
   // ─── Two-step admin handover (external-audit hardening, 2026-06) ────────
@@ -139,6 +175,7 @@ export class AdminApi {
       .accountsPartial({
         config: this.c.configPda,
         admin: args.admin.publicKey,
+        instructions: SYSVAR_INSTRUCTIONS_PUBKEY,
       })
       .signers([args.admin])
       .rpc();
@@ -178,6 +215,7 @@ export class AdminApi {
       .accountsPartial({
         config: this.c.configPda,
         admin: args.admin.publicKey,
+        instructions: SYSVAR_INSTRUCTIONS_PUBKEY,
       })
       .signers([args.admin])
       .rpc();
@@ -192,17 +230,19 @@ export class AdminApi {
     bucket: Bucket;
     newOperator: PublicKey;
     admin: Signer;
+    feeCosigner: FeeCosigner;
   }): Promise<string> {
     const [bucketPda] = findBucket(this.c.programId, args.bucket);
-    return this.c.program.methods
+    const ix = await this.c.program.methods
       .setBucketOperator(args.newOperator)
       .accountsPartial({
         config: this.c.configPda,
         admin: args.admin.publicKey,
         bucket: bucketPda,
+        instructions: SYSVAR_INSTRUCTIONS_PUBKEY,
       })
-      .signers([args.admin])
-      .rpc();
+      .instruction();
+    return this.cosign(ix, args.feeCosigner, args.admin);
   }
 
   /**
@@ -217,9 +257,10 @@ export class AdminApi {
     bettingSecs: anchor.BN | number;
     guardBandSlots: anchor.BN | number;
     admin: Signer;
+    feeCosigner: FeeCosigner;
   }): Promise<string> {
     const [bucketPda] = findBucket(this.c.programId, args.bucket);
-    return this.c.program.methods
+    const ix = await this.c.program.methods
       .setBucketWindowTiming(
         new anchor.BN(args.openSecs.toString()),
         new anchor.BN(args.bettingSecs.toString()),
@@ -229,91 +270,102 @@ export class AdminApi {
         config: this.c.configPda,
         admin: args.admin.publicKey,
         bucket: bucketPda,
+        instructions: SYSVAR_INSTRUCTIONS_PUBKEY,
       })
-      .signers([args.admin])
-      .rpc();
+      .instruction();
+    return this.cosign(ix, args.feeCosigner, args.admin);
   }
 
   async setFeeRecipient(args: {
     newFeeRecipient: PublicKey;
     admin: Signer;
+    feeCosigner: FeeCosigner;
   }): Promise<string> {
-    return this.c.program.methods
+    const ix = await this.c.program.methods
       .setFeeRecipient(args.newFeeRecipient)
       .accountsPartial({
         config: this.c.configPda,
         admin: args.admin.publicKey,
+        instructions: SYSVAR_INSTRUCTIONS_PUBKEY,
       })
-      .signers([args.admin])
-      .rpc();
+      .instruction();
+    return this.cosign(ix, args.feeCosigner, args.admin);
   }
 
   async setBucketParams(args: {
     bucket: Bucket;
     params: BucketParamsInput;
     admin: Signer;
+    feeCosigner: FeeCosigner;
   }): Promise<string> {
     const [bucketPda] = findBucket(this.c.programId, args.bucket);
-    return this.c.program.methods
+    const ix = await this.c.program.methods
       .setBucketParams(args.params as any)
       .accountsPartial({
         config: this.c.configPda,
         admin: args.admin.publicKey,
         bucket: bucketPda,
+        instructions: SYSVAR_INSTRUCTIONS_PUBKEY,
       })
-      .signers([args.admin])
-      .rpc();
+      .instruction();
+    return this.cosign(ix, args.feeCosigner, args.admin);
   }
 
   async setPause(args: {
     bucket: Bucket;
     paused: boolean;
     admin: Signer;
+    feeCosigner: FeeCosigner;
   }): Promise<string> {
     const [bucketPda] = findBucket(this.c.programId, args.bucket);
-    return this.c.program.methods
+    const ix = await this.c.program.methods
       .setPause(args.paused)
       .accountsPartial({
         config: this.c.configPda,
         admin: args.admin.publicKey,
         bucket: bucketPda,
+        instructions: SYSVAR_INSTRUCTIONS_PUBKEY,
       })
-      .signers([args.admin])
-      .rpc();
+      .instruction();
+    return this.cosign(ix, args.feeCosigner, args.admin);
   }
 
   async setDepositsOpen(args: {
     bucket: Bucket;
     open: boolean;
     admin: Signer;
+    feeCosigner: FeeCosigner;
   }): Promise<string> {
     const [bucketPda] = findBucket(this.c.programId, args.bucket);
-    return this.c.program.methods
+    const ix = await this.c.program.methods
       .setDepositsOpen(args.open)
       .accountsPartial({
         config: this.c.configPda,
         admin: args.admin.publicKey,
         bucket: bucketPda,
+        instructions: SYSVAR_INSTRUCTIONS_PUBKEY,
       })
-      .signers([args.admin])
-      .rpc();
+      .instruction();
+    return this.cosign(ix, args.feeCosigner, args.admin);
   }
 
   async setClaimsOpen(args: {
     bucket: Bucket;
     open: boolean;
     admin: Signer;
+    feeCosigner: FeeCosigner;
   }): Promise<string> {
     const [bucketPda] = findBucket(this.c.programId, args.bucket);
-    return this.c.program.methods
+    const ix = await this.c.program.methods
       .setClaimsOpen(args.open)
       .accountsPartial({
         config: this.c.configPda,
         admin: args.admin.publicKey,
         bucket: bucketPda,
+        instructions: SYSVAR_INSTRUCTIONS_PUBKEY,
       })
-      .signers([args.admin])
-      .rpc();
+      .instruction();
+    return this.cosign(ix, args.feeCosigner, args.admin);
   }
 
   // ─── V5 flat fee model ──────────────────────────────────────────────
@@ -329,9 +381,10 @@ export class AdminApi {
     exitFeeBps: number;
     exitFeeEnabled: boolean;
     admin: Signer;
+    feeCosigner: FeeCosigner;
   }): Promise<string> {
     const [bucketPda] = findBucket(this.c.programId, args.bucket);
-    return this.c.program.methods
+    const ix = await this.c.program.methods
       .setFees(
         args.entryFeeBps,
         args.entryFeeEnabled,
@@ -342,9 +395,10 @@ export class AdminApi {
         config: this.c.configPda,
         admin: args.admin.publicKey,
         bucket: bucketPda,
+        instructions: SYSVAR_INSTRUCTIONS_PUBKEY,
       })
-      .signers([args.admin])
-      .rpc();
+      .instruction();
+    return this.cosign(ix, args.feeCosigner, args.admin);
   }
 
   /**
@@ -358,45 +412,45 @@ export class AdminApi {
     pullFeeBps: number;
     pullFeeEnabled: boolean;
     admin: Signer;
+    feeCosigner: FeeCosigner;
   }): Promise<string> {
     const [bucketPda] = findBucket(this.c.programId, args.bucket);
-    return this.c.program.methods
+    const ix = await this.c.program.methods
       .setPullFee(args.pullFeeBps, args.pullFeeEnabled)
       .accountsPartial({
         config: this.c.configPda,
         admin: args.admin.publicKey,
         bucket: bucketPda,
+        instructions: SYSVAR_INSTRUCTIONS_PUBKEY,
       })
-      .signers([args.admin])
-      .rpc();
+      .instruction();
+    return this.cosign(ix, args.feeCosigner, args.admin);
   }
 
   /**
-   * V5 — bundle a `set_pull_fee` ix for every passed bucket into a single
-   * atomic transaction. Same bps + enabled flag applied to all targets.
-   * Convenient for setting Simple/Refined/Ultra in one shot from the admin
-   * console. Fails atomically if any bucket rejects (e.g. claims-open lock).
+   * V5 — apply the same `set_pull_fee` (bps + enabled flag) to every passed
+   * bucket. Each gated ix now needs its own fresh nonce + cosign, so they can
+   * no longer share one atomic transaction; this loops SEQUENTIALLY, awaiting
+   * a separately-cosigned `setPullFee` per bucket. Returns the LAST signature.
    */
   async setPullFeeAll(args: {
     buckets: Bucket[];
     pullFeeBps: number;
     pullFeeEnabled: boolean;
     admin: Signer;
+    feeCosigner: FeeCosigner;
   }): Promise<string> {
-    const tx = new Transaction();
+    let lastSig = "";
     for (const bucket of args.buckets) {
-      const [bucketPda] = findBucket(this.c.programId, bucket);
-      const ix = await this.c.program.methods
-        .setPullFee(args.pullFeeBps, args.pullFeeEnabled)
-        .accountsPartial({
-          config: this.c.configPda,
-          admin: args.admin.publicKey,
-          bucket: bucketPda,
-        })
-        .instruction();
-      tx.add(ix);
+      lastSig = await this.setPullFee({
+        bucket,
+        pullFeeBps: args.pullFeeBps,
+        pullFeeEnabled: args.pullFeeEnabled,
+        admin: args.admin,
+        feeCosigner: args.feeCosigner,
+      });
     }
-    return this.c.program.provider.sendAndConfirm!(tx, [args.admin]);
+    return lastSig;
   }
 
   /**
@@ -408,17 +462,19 @@ export class AdminApi {
     bucket: Bucket;
     performanceFeeBps: number;
     admin: Signer;
+    feeCosigner: FeeCosigner;
   }): Promise<string> {
     const [bucketPda] = findBucket(this.c.programId, args.bucket);
-    return this.c.program.methods
+    const ix = await this.c.program.methods
       .setPerfFee(args.performanceFeeBps)
       .accountsPartial({
         config: this.c.configPda,
         admin: args.admin.publicKey,
         bucket: bucketPda,
+        instructions: SYSVAR_INSTRUCTIONS_PUBKEY,
       })
-      .signers([args.admin])
-      .rpc();
+      .instruction();
+    return this.cosign(ix, args.feeCosigner, args.admin);
   }
 
   /**
@@ -464,6 +520,7 @@ export class AdminApi {
   async setFeeSchedule(args: {
     recipients: FeeRecipientInput[];
     admin: Signer;
+    feeCosigner: FeeCosigner;
   }): Promise<string> {
     const [feeSchedule] = findFeeSchedule(this.c.programId);
     const pad = (xs: FeeRecipientInput[]): FeeRecipientInput[] => {
@@ -473,15 +530,16 @@ export class AdminApi {
       }
       return arr;
     };
-    return this.c.program.methods
+    const ix = await this.c.program.methods
       .setFeeSchedule(pad(args.recipients) as any)
       .accountsPartial({
         config: this.c.configPda,
         admin: args.admin.publicKey,
         feeSchedule,
+        instructions: SYSVAR_INSTRUCTIONS_PUBKEY,
       })
-      .signers([args.admin])
-      .rpc();
+      .instruction();
+    return this.cosign(ix, args.feeCosigner, args.admin);
   }
 
   /**

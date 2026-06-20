@@ -21,7 +21,7 @@ async function main() {
   const keyPath =
     process.env.DEPOSITOR_KEYPAIR_PATH ?? join(homedir(), ".config/solana/id.json");
   const programId = new PublicKey(
-    process.env.CWR_PROGRAM_ID ?? "3FSH7MkXUb1AkNQFwj2ppNer657dCtxfWHSvhiyfqCRP",
+    process.env.CWR_PROGRAM_ID ?? "CLDmHatW3uszqHqCYgMkAk9jFW1Zse5yPV6RWdTArx2E",
   );
   const depositor = Keypair.fromSecretKey(
     Uint8Array.from(JSON.parse(readFileSync(keyPath, "utf8"))),

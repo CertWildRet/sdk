@@ -10,7 +10,7 @@ import { Bucket, BUCKET_LABELS, CwrVault, navPerShareToNumber } from "../src";
 async function main() {
   const rpc = process.env.SOLANA_RPC_URL ?? "http://127.0.0.1:8899";
   const programId = new PublicKey(
-    process.env.CWR_PROGRAM_ID ?? "3FSH7MkXUb1AkNQFwj2ppNer657dCtxfWHSvhiyfqCRP",
+    process.env.CWR_PROGRAM_ID ?? "CLDmHatW3uszqHqCYgMkAk9jFW1Zse5yPV6RWdTArx2E",
   );
   const connection = new Connection(rpc, "confirmed");
   const vault = new CwrVault({ connection, programId });
