@@ -1,5 +1,5 @@
 import BN from "bn.js";
-import { Signer, SystemProgram } from "@solana/web3.js";
+import { ComputeBudgetProgram, Signer, SystemProgram } from "@solana/web3.js";
 import {
   ASSOCIATED_TOKEN_PROGRAM_ID,
   TOKEN_PROGRAM_ID,
@@ -9,6 +9,7 @@ import {
   Bucket,
   ENTROPY_PROGRAM_ID,
   ENTROPY_VAR,
+  ORE_LST_PROGRAM_ID,
   ORE_MINT,
   ORE_PROGRAM_ID,
   ORE_STAKE_PROGRAM_ID,
@@ -209,11 +210,16 @@ export class CrankApi {
         oreLstTreasuryOreAta,
         oreLstVesting,
         oreStakeProgram: ORE_STAKE_PROGRAM_ID,
+        oreLstProgram: ORE_LST_PROGRAM_ID,
         caller: args.caller.publicKey,
         tokenProgram: TOKEN_PROGRAM_ID,
         associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
         systemProgram: SystemProgram.programId,
       })
+      // settle does a lot in one tx (up to 2 ATA creates + ClaimSOL + ClaimORE +
+      // the 17-account ore-lst Wrap), well past the 200k default CU. Raise the
+      // ceiling (free — no CU price set, so no extra priority fee).
+      .preInstructions([ComputeBudgetProgram.setComputeUnitLimit({ units: 1_000_000 })])
       .signers([args.caller])
       .rpc();
   }
