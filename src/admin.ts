@@ -15,6 +15,8 @@ import {
   findFeeBucket,
   findFeeSchedule,
   findMiningAuthority,
+  findPendingState,
+  findPendingTreasury,
 } from "./pdas";
 import {
   FeeCosigner,
@@ -132,6 +134,38 @@ export class AdminApi {
         admin: args.admin.publicKey,
         bucket: bucketPda,
         miningAuthority,
+        systemProgram: SystemProgram.programId,
+        instructions: SYSVAR_INSTRUCTIONS_PUBKEY,
+      })
+      .instruction();
+    return this.cosign(ix, args.feeCosigner, args.admin);
+  }
+
+  /**
+   * One-time (per bucket) bootstrap of the parked-capital buffer. Cosigned
+   * admin op. Creates the `pending_state` counter and rent-seeds the
+   * `pending_treasury` escrow from admin. MUST be run after `initBucket`
+   * before parking is available for that bucket.
+   *
+   * Wires InitPending: config, admin, bucket, pending_state, pending_treasury,
+   * system_program, instructions.
+   */
+  async initPending(args: {
+    bucket: Bucket;
+    admin: Signer;
+    feeCosigner: FeeCosigner;
+  }): Promise<string> {
+    const [bucketPda] = findBucket(this.c.programId, args.bucket);
+    const [pendingState] = findPendingState(this.c.programId, args.bucket);
+    const [pendingTreasury] = findPendingTreasury(this.c.programId, args.bucket);
+    const ix = await this.c.program.methods
+      .initPending(args.bucket)
+      .accountsPartial({
+        config: this.c.configPda,
+        admin: args.admin.publicKey,
+        bucket: bucketPda,
+        pendingState,
+        pendingTreasury,
         systemProgram: SystemProgram.programId,
         instructions: SYSVAR_INSTRUCTIONS_PUBKEY,
       })

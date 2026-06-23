@@ -13,9 +13,13 @@ import { Bucket } from "./constants";
 import { CwrVaultClient } from "./client";
 import {
   deriveBucketAddresses,
+  findBucket,
   findFeeBucket,
   findFeeSchedule,
   findMiningAuthority,
+  findPendingDeposit,
+  findPendingState,
+  findPendingTreasury,
   findPosition,
   oreMinerPda,
 } from "./pdas";
@@ -143,6 +147,75 @@ export class UserApi {
       })
       .preInstructions(pre)
       .signers([args.user])
+      .rpc();
+  }
+
+  /**
+   * Park SOL into the buffer during the BETTING (cranking) phase, when normal
+   * `deposit` is closed. NO shares are minted and NAV is untouched: the SOL
+   * sits in the per-bucket `pending_treasury` escrow until `finalizePending`
+   * converts it at the next settled OPEN window. Repeat parks accumulate.
+   * Reversible any time via `cancelPending`.
+   *
+   * Wires ParkDeposit: config, bucket, pending_state, pending_treasury,
+   * ore_miner, user, pending_deposit, system_program.
+   */
+  async parkDeposit(args: {
+    bucket: Bucket;
+    amount: BN;
+    user: Signer;
+  }): Promise<string> {
+    const [bucketPda] = findBucket(this.c.programId, args.bucket);
+    const [pendingState] = findPendingState(this.c.programId, args.bucket);
+    const [pendingTreasury] = findPendingTreasury(this.c.programId, args.bucket);
+    const [pendingDeposit] = findPendingDeposit(this.c.programId, args.bucket, args.user.publicKey);
+    const [miningAuthority] = findMiningAuthority(this.c.programId, args.bucket);
+    const [oreMiner] = oreMinerPda(miningAuthority);
+
+    return this.c.program.methods
+      .parkDeposit(args.amount)
+      .accountsPartial({
+        config: this.c.configPda,
+        bucket: bucketPda,
+        pendingState,
+        pendingTreasury,
+        oreMiner,
+        user: args.user.publicKey,
+        pendingDeposit,
+        systemProgram: SystemProgram.programId,
+      })
+      .signers([args.user])
+      .rpc();
+  }
+
+  /**
+   * Pull a parked (not-yet-finalized) deposit back out. Owner-signed, allowed
+   * in ANY phase and even when paused — escrow is returned in full and the
+   * ticket is closed (rent -> owner). The unconditional no-stuck-capital escape.
+   *
+   * Wires CancelPending: bucket, pending_state, pending_treasury, owner,
+   * pending_deposit, system_program.
+   */
+  async cancelPending(args: {
+    bucket: Bucket;
+    owner: Signer;
+  }): Promise<string> {
+    const [bucketPda] = findBucket(this.c.programId, args.bucket);
+    const [pendingState] = findPendingState(this.c.programId, args.bucket);
+    const [pendingTreasury] = findPendingTreasury(this.c.programId, args.bucket);
+    const [pendingDeposit] = findPendingDeposit(this.c.programId, args.bucket, args.owner.publicKey);
+
+    return this.c.program.methods
+      .cancelPending()
+      .accountsPartial({
+        bucket: bucketPda,
+        pendingState,
+        pendingTreasury,
+        owner: args.owner.publicKey,
+        pendingDeposit,
+        systemProgram: SystemProgram.programId,
+      })
+      .signers([args.owner])
       .rpc();
   }
 }

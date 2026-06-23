@@ -1,4 +1,5 @@
 import BN from "bn.js";
+import { utils } from "@coral-xyz/anchor";
 import { AccountInfo, PublicKey } from "@solana/web3.js";
 import { getAccount, getAssociatedTokenAddressSync, getMint } from "@solana/spl-token";
 import { Bucket } from "./constants";
@@ -8,6 +9,9 @@ import {
   findFeeBucket,
   findFeeSchedule,
   findMiningAuthority,
+  findPendingDeposit,
+  findPendingState,
+  findPendingTreasury,
   findShareMint,
   findTreasury,
   oreMinerPda,
@@ -127,5 +131,41 @@ export class ReadApi {
     const [pda] = findFeeBucket(this.c.programId);
     const info = await this.c.connection.getAccountInfo(pda);
     return new BN(info?.lamports ?? 0);
+  }
+
+  // ─── Parked-capital buffer reads ──────────────────────────────────────
+
+  /** Buffer state (pending_total + pending_count) for a bucket, or null if the
+   *  buffer was never initialized (`initPending` not yet run for it). */
+  async pendingState(bucket: Bucket): Promise<any | null> {
+    const [pda] = findPendingState(this.c.programId, bucket);
+    return this.c.program.account.pendingState.fetchNullable(pda);
+  }
+
+  /** Lamports held in the per-bucket parked-SOL escrow (incl. the rent seed). */
+  async pendingTreasuryLamports(bucket: Bucket): Promise<BN> {
+    const [pda] = findPendingTreasury(this.c.programId, bucket);
+    const info = await this.c.connection.getAccountInfo(pda);
+    return new BN(info?.lamports ?? 0);
+  }
+
+  /** A single owner's parked-deposit ticket, or null if none open. */
+  async pendingDeposit(bucket: Bucket, owner: PublicKey): Promise<any | null> {
+    const [pda] = findPendingDeposit(this.c.programId, bucket, owner);
+    return this.c.program.account.pendingDeposit.fetchNullable(pda);
+  }
+
+  /**
+   * Scan ALL open parked-deposit tickets for a bucket (the keeper uses this to
+   * auto-finalize parkers after settle). Filters on the ticket's bucket_id via
+   * a memcmp at offset 40 (8 disc + 32 owner).
+   */
+  async allPending(
+    bucket: Bucket,
+  ): Promise<Array<{ publicKey: PublicKey; account: any }>> {
+    const bucketByte = utils.bytes.bs58.encode(Buffer.from([(bucket as number) & 0xff]));
+    return this.c.program.account.pendingDeposit.all([
+      { memcmp: { offset: 8 + 32, bytes: bucketByte } },
+    ]);
   }
 }

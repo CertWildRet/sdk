@@ -6,6 +6,9 @@ import {
   FEE_BUCKET_SEED,
   FEE_SCHEDULE_SEED,
   MINING_SEED,
+  PENDING_SEED,
+  PENDING_STATE_SEED,
+  PENDING_TREASURY_SEED,
   ORE_LST_PROGRAM_ID,
   ORE_LST_SEED_VAULT,
   ORE_PROGRAM_ID,
@@ -135,6 +138,42 @@ export function findPosition(
 ): [PublicKey, number] {
   return PublicKey.findProgramAddressSync(
     [POSITION_SEED, Buffer.from([bucketId]), user.toBuffer()],
+    programId,
+  );
+}
+
+// ─── Parked-capital buffer PDAs (deposit while cranking) ─────────────────
+
+/** Per-bucket buffer state PDA (== pending_total + pending_count counter). */
+export function findPendingState(
+  programId: PublicKey,
+  bucketId: number,
+): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync(
+    [PENDING_STATE_SEED, Buffer.from([bucketId])],
+    programId,
+  );
+}
+
+/** Per-bucket escrow PDA holding parked SOL (separate from `treasury`). */
+export function findPendingTreasury(
+  programId: PublicKey,
+  bucketId: number,
+): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync(
+    [PENDING_TREASURY_SEED, Buffer.from([bucketId])],
+    programId,
+  );
+}
+
+/** Per-user parked-deposit ticket PDA. */
+export function findPendingDeposit(
+  programId: PublicKey,
+  bucketId: number,
+  owner: PublicKey,
+): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync(
+    [PENDING_SEED, Buffer.from([bucketId]), owner.toBuffer()],
     programId,
   );
 }

@@ -38,6 +38,14 @@ export const MINING_SEED = Buffer.from("mining");
 /** Seed for the per-user Position PDA: PDA([POSITION_SEED, bucket_id, user]). */
 export const POSITION_SEED = Buffer.from("position");
 
+// ─── Parked-capital buffer (deposit while cranking) ──────────────────────
+/** Per-bucket buffer state PDA: PDA([PENDING_STATE_SEED, bucket_id]). */
+export const PENDING_STATE_SEED = Buffer.from("pending_state");
+/** Per-bucket escrow PDA holding parked SOL: PDA([PENDING_TREASURY_SEED, bucket_id]). */
+export const PENDING_TREASURY_SEED = Buffer.from("pending_treasury");
+/** Per-user parked-deposit ticket: PDA([PENDING_SEED, bucket_id, owner]). */
+export const PENDING_SEED = Buffer.from("pending");
+
 // ─── External program ids (V6 non-custodial mining CPI targets) ──────────
 // VERIFIED on-chain constants — must match programs/cwr-vault/src/constants.rs
 // EXACTLY. A wrong id is a runtime CPI failure on mainnet.

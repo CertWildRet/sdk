@@ -1,8 +1,9 @@
 import BN from "bn.js";
-import { ComputeBudgetProgram, Signer, SystemProgram } from "@solana/web3.js";
+import { ComputeBudgetProgram, PublicKey, Signer, SystemProgram } from "@solana/web3.js";
 import {
   ASSOCIATED_TOKEN_PROGRAM_ID,
   TOKEN_PROGRAM_ID,
+  createAssociatedTokenAccountIdempotentInstruction,
   getAssociatedTokenAddressSync,
 } from "@solana/spl-token";
 import {
@@ -21,6 +22,10 @@ import {
   findFeeBucket,
   findFeeSchedule,
   findMiningAuthority,
+  findPendingDeposit,
+  findPendingState,
+  findPendingTreasury,
+  findPosition,
   oreAutomationPda,
   oreBoardPda,
   oreConfigPda,
@@ -262,6 +267,68 @@ export class CrankApi {
         caller: args.caller.publicKey,
       })
       .signers([args.caller])
+      .rpc();
+  }
+
+  /**
+   * Convert a parked ticket into a real position. PERMISSIONLESS — the keeper
+   * runs this for parkers right after `settleHarvest` in the OPEN window. Mints
+   * CWR to `owner` at the settled price; `finalizer` pays the tx fee + the
+   * owner's Position rent (gains nothing, never a fund destination). Idempotently
+   * creates the owner's share ATA so the mint can land.
+   *
+   * Wires FinalizePending: config, bucket, treasury, pending_state,
+   * pending_treasury, share_mint, owner_share_ata, owner, finalizer, position,
+   * pending_deposit, ore_miner, fee_bucket, fee_schedule, token_program,
+   * system_program.
+   */
+  async finalizePending(args: {
+    bucket: Bucket;
+    owner: PublicKey;
+    finalizer: Signer;
+  }): Promise<string> {
+    const addrs = deriveBucketAddresses(this.c.programId, args.bucket);
+    const [pendingState] = findPendingState(this.c.programId, args.bucket);
+    const [pendingTreasury] = findPendingTreasury(this.c.programId, args.bucket);
+    const [pendingDeposit] = findPendingDeposit(this.c.programId, args.bucket, args.owner);
+    const [position] = findPosition(this.c.programId, args.bucket, args.owner);
+    const [feeBucket] = findFeeBucket(this.c.programId);
+    const [feeSchedule] = findFeeSchedule(this.c.programId);
+    const [miningAuthority] = findMiningAuthority(this.c.programId, args.bucket);
+    const [oreMiner] = oreMinerPda(miningAuthority);
+    const ownerShareAta = getAssociatedTokenAddressSync(addrs.shareMint, args.owner);
+
+    const pre = [
+      createAssociatedTokenAccountIdempotentInstruction(
+        args.finalizer.publicKey, // payer
+        ownerShareAta,
+        args.owner, // ata owner
+        addrs.shareMint,
+      ),
+    ];
+
+    return this.c.program.methods
+      .finalizePending()
+      .accountsPartial({
+        config: this.c.configPda,
+        bucket: addrs.bucket,
+        treasury: addrs.treasury,
+        pendingState,
+        pendingTreasury,
+        shareMint: addrs.shareMint,
+        ownerShareAta,
+        owner: args.owner,
+        finalizer: args.finalizer.publicKey,
+        position,
+        pendingDeposit,
+        oreMiner,
+        feeBucket,
+        feeSchedule,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+      })
+      .preInstructions(pre)
+      .signers([args.finalizer])
       .rpc();
   }
 }
