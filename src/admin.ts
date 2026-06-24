@@ -97,8 +97,8 @@ export class AdminApi {
   async initialize(args: {
     admin: Signer;
     feeRecipient: PublicKey;
-    /** V5 — stORE mint pinned at init. Must be a real SPL mint
-     *  (Pubkey::default() is rejected — see audit C1). */
+    /** V5 - stORE mint pinned at init. Must be a real SPL mint
+     *  (Pubkey::default() is rejected - see audit C1). */
     storeMint: PublicKey;
     /**
      * External-audit hardening (2026-06): the program data account that
@@ -125,7 +125,7 @@ export class AdminApi {
   }
 
   /**
-   * V5 — `operatorWallet` is now PER-BUCKET (pinned at init time, mutable
+   * V5 - `operatorWallet` is now PER-BUCKET (pinned at init time, mutable
    * via `setBucketOperator`). Each bucket having its own operator gives
    * it its own ORE Miner PDA, so `claim_ore` cadence + refining-yield
    * accumulation are isolated across Simple / Refined / Ultra.
@@ -160,7 +160,7 @@ export class AdminApi {
   }
 
   /**
-   * V6 — one-time init of a bucket's per-bucket mining authority PDA. Derives
+   * V6 - one-time init of a bucket's per-bucket mining authority PDA. Derives
    * `mining_authority` (and, on-chain, the ORE Miner key it stores on the
    * bucket). Admin-signed.
    *
@@ -286,7 +286,7 @@ export class AdminApi {
   }
 
   /**
-   * V5 — rotate a single bucket's operator wallet. Blocked while
+   * V5 - rotate a single bucket's operator wallet. Blocked while
    * `claims_open == true` (NAV frozen). Per-bucket: rotating Simple's
    * operator does NOT touch Refined or Ultra.
    */
@@ -310,7 +310,7 @@ export class AdminApi {
   }
 
   /**
-   * Admin-tunable per-bucket window timing — change OPEN/BETTING window
+   * Admin-tunable per-bucket window timing - change OPEN/BETTING window
    * lengths + the crank guard band without a program upgrade. Validated
    * on-chain (durations in [30s, 7d]; guard band must leave >= ~1 ORE round
    * crankable). All values in their native units: seconds / seconds / slots.
@@ -466,7 +466,7 @@ export class AdminApi {
   }
 
   /**
-   * V5 — narrow admin setter for the per-pull VOLUME fee. This is the
+   * V5 - narrow admin setter for the per-pull VOLUME fee. This is the
    * ONLY active monetisation in the V5 baseline product (entry / exit /
    * perf all default to 0 bps). Bps capped at MAX_PULL_FEE_BPS (500).
    * Bumps blocked while `claims_open == true` (raising is gated; lowering OK).
@@ -492,7 +492,7 @@ export class AdminApi {
   }
 
   /**
-   * V5 — apply the same `set_pull_fee` (bps + enabled flag) to every passed
+   * V5 - apply the same `set_pull_fee` (bps + enabled flag) to every passed
    * bucket. Each gated ix now needs its own fresh nonce + cosign, so they can
    * no longer share one atomic transaction; this loops SEQUENTIALLY, awaiting
    * a separately-cosigned `setPullFee` per bucket. Returns the LAST signature.
@@ -575,7 +575,7 @@ export class AdminApi {
 
   /**
    * Admin update of the fee schedule. Replaces the recipient array.
-   * `genesis_ts` is preserved unchanged (telemetry only — when the
+   * `genesis_ts` is preserved unchanged (telemetry only - when the
    * schedule was first initialized). Non-empty slots must sum to
    * exactly 10000 bps. To migrate to a multi-sig later, rotate the
    * admin pubkey via `setAdmin(...)` first and have the multi-sig

@@ -79,7 +79,7 @@ export function findFeeBucket(programId: PublicKey): [PublicKey, number] {
   return PublicKey.findProgramAddressSync([FEE_BUCKET_SEED], programId);
 }
 
-/** V5 — per-bucket stORE-holding token account (authority = bucket PDA). */
+/** V5 - per-bucket stORE-holding token account (authority = bucket PDA). */
 export function findStoreTreasury(
   programId: PublicKey,
   bucketId: number,
@@ -116,7 +116,7 @@ export function deriveBucketAddresses(
 //   - mining authority: PDA([MINING_SEED, bucket_id])
 //   - position:         PDA([POSITION_SEED, bucket_id, user])
 //
-// External ORE / ore-lst / ore-stake PDAs — these MUST mirror
+// External ORE / ore-lst / ore-stake PDAs - these MUST mirror
 // programs/cwr-vault/src/ore_cpi.rs EXACTLY. A wrong seed/program is a
 // runtime CPI failure on mainnet.
 // ════════════════════════════════════════════════════════════════════════
@@ -188,7 +188,7 @@ export function findReferralConfig(programId: PublicKey): [PublicKey, number] {
   return PublicKey.findProgramAddressSync([REFERRAL_CONFIG_SEED], programId);
 }
 
-/** Global referral escrow PDA — the bounded payout pool (10 bps carve). */
+/** Global referral escrow PDA - the bounded payout pool (10 bps carve). */
 export function findReferralTreasury(programId: PublicKey): [PublicKey, number] {
   return PublicKey.findProgramAddressSync([REFERRAL_TREASURY_SEED], programId);
 }

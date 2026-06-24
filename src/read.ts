@@ -89,7 +89,7 @@ export class ReadApi {
 
   /**
    * Preview the shares a user would receive for depositing `amount`, given the
-   * current bucket state. Does not account for the V5 entry fee — caller should
+   * current bucket state. Does not account for the V5 entry fee - caller should
    * subtract the fee before calling if it's enabled on the target bucket.
    */
   async previewDeposit(bucket: Bucket, amount: BN): Promise<BN> {
@@ -100,7 +100,7 @@ export class ReadApi {
 
   /**
    * Preview the gross SOL payout for redeeming `shares`. Does not subtract
-   * the perf-fee or V5 exit fee — caller should apply those separately for
+   * the perf-fee or V5 exit fee - caller should apply those separately for
    * a final user-visible payout estimate.
    */
   async previewWithdraw(bucket: Bucket, shares: BN): Promise<BN> {
@@ -110,10 +110,10 @@ export class ReadApi {
   }
 
   /**
-   * V6 — raw ORE Miner account for a bucket's mining authority. NAV is now
+   * V6 - raw ORE Miner account for a bucket's mining authority. NAV is now
    * derived on-chain from this account (no more `report_nav`); this helper
    * returns the raw account info so a caller can decode the documented miner
-   * byte layout off-chain (len 544, disc 103 — see ore_cpi.rs offsets) if it
+   * byte layout off-chain (len 544, disc 103 - see ore_cpi.rs offsets) if it
    * needs to mirror the on-chain derived NAV. Returns null before
    * `init_mining_pda` / first deploy creates the miner.
    */
@@ -123,13 +123,13 @@ export class ReadApi {
     return this.c.connection.getAccountInfo(miner);
   }
 
-  /** V5 — fetch the global fee schedule. */
+  /** V5 - fetch the global fee schedule. */
   async feeSchedule(): Promise<FeeScheduleState | null> {
     const [pda] = findFeeSchedule(this.c.programId);
     return this.c.program.account.feeSchedule.fetchNullable(pda);
   }
 
-  /** V5 — current SOL balance accumulated in the global fee bucket. */
+  /** V5 - current SOL balance accumulated in the global fee bucket. */
   async feeBucketLamports(): Promise<BN> {
     const [pda] = findFeeBucket(this.c.programId);
     const info = await this.c.connection.getAccountInfo(pda);

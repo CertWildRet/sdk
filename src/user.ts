@@ -40,7 +40,7 @@ export class UserApi {
    * entry-fee is skimmed by the program from `amount` into the global fee
    * bucket BEFORE shares are minted (so shares reflect the net deposited).
    *
-   * V6 — also threads the per-user Position PDA (created lazily on first
+   * V6 - also threads the per-user Position PDA (created lazily on first
    * deposit) and the ORE Miner read account, which the handler uses for the
    * derived NAV. The miner is read-only; it need not exist before
    * `init_mining_pda` (validated in-handler only when mining is initialized).
@@ -197,7 +197,7 @@ export class UserApi {
 
   /**
    * Pull a parked (not-yet-finalized) deposit back out. Owner-signed, allowed
-   * in ANY phase and even when paused — escrow is returned in full and the
+   * in ANY phase and even when paused - escrow is returned in full and the
    * ticket is closed (rent -> owner). The unconditional no-stuck-capital escape.
    *
    * Wires CancelPending: bucket, pending_state, pending_treasury, owner,

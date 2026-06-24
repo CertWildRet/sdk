@@ -56,7 +56,7 @@ const ALL_SQUARES: boolean[] = Array.from({ length: 25 }, () => true);
  * Operator / crank API for the V6 non-custodial mining vault.
  *
  * The vault PDA mines ORE directly on-chain via CPI. The operator only signs
- * the OUTER crank (`crank_mine`) — it controls WHEN, never WHERE; funds can
+ * the OUTER crank (`crank_mine`) - it controls WHEN, never WHERE; funds can
  * only flow PDA ↔ ORE/stORE. `checkpoint` / `settle_harvest` / `open_window` /
  * `close_window` are permissionless (any signer pays the tx fee).
  *
@@ -237,7 +237,7 @@ export class CrankApi {
       })
       // settle does a lot in one tx (up to 2 ATA creates + ClaimSOL + ClaimORE +
       // the 17-account ore-lst Wrap), well past the 200k default CU. Raise the
-      // ceiling (free — no CU price set, so no extra priority fee).
+      // ceiling (free - no CU price set, so no extra priority fee).
       .preInstructions([ComputeBudgetProgram.setComputeUnitLimit({ units: 1_000_000 })])
       .signers([args.caller])
       .rpc();
@@ -285,7 +285,7 @@ export class CrankApi {
   }
 
   /**
-   * Convert a parked ticket into a real position. PERMISSIONLESS — the keeper
+   * Convert a parked ticket into a real position. PERMISSIONLESS - the keeper
    * runs this for parkers right after `settleHarvest` in the OPEN window. Mints
    * CWR to `owner` at the settled price; `finalizer` pays the tx fee + the
    * owner's Position rent (gains nothing, never a fund destination). Idempotently
@@ -389,7 +389,7 @@ export class CrankApi {
   /**
    * PUSH a referrer their accrued rewards (the referrer does NOT sign). The
    * relayer (keeper) signs + fee-pays; funds go to `referrer`. Authorized by a
-   * settlement-authority attestation (binds `referrer` + cumulative) — the same
+   * settlement-authority attestation (binds `referrer` + cumulative) - the same
    * attestation a referrer would use to pull-claim, sharing the watermark so no
    * double-collect. Drives both the "selective" (specific referrers) and "all
    * opted-in" keeper payout modes (the mode = which referrers you loop over).

@@ -10,7 +10,7 @@ export enum Bucket {
   Simple = 0,
   Refined = 1,
   Ultra = 2,
-  // Legacy aliases — same numeric values, kept for backwards-compat.
+  // Legacy aliases - same numeric values, kept for backwards-compat.
   Liquid = 0,
   Staked = 1,
   Locked = 2,
@@ -58,7 +58,7 @@ export const REFERRAL_BPS = 10;
 export const REFERRAL_PULL_FEE_BPS = 110;
 
 // ─── External program ids (V6 non-custodial mining CPI targets) ──────────
-// VERIFIED on-chain constants — must match programs/cwr-vault/src/constants.rs
+// VERIFIED on-chain constants - must match programs/cwr-vault/src/constants.rs
 // EXACTLY. A wrong id is a runtime CPI failure on mainnet.
 
 /** The ORE program (board v3 mining model). */
