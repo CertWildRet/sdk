@@ -23,6 +23,9 @@ import {
   ORE_STAKE_SEED_TREASURY,
   ORE_STAKE_SEED_VESTING,
   POSITION_SEED,
+  REFERRAL_CONFIG_SEED,
+  REFERRAL_TREASURY_SEED,
+  REFERRER_SEED,
   SHARE_MINT_SEED,
   STORE_TREASURY_SEED,
   TREASURY_SEED,
@@ -174,6 +177,29 @@ export function findPendingDeposit(
 ): [PublicKey, number] {
   return PublicKey.findProgramAddressSync(
     [PENDING_SEED, Buffer.from([bucketId]), owner.toBuffer()],
+    programId,
+  );
+}
+
+// ─── Referral program PDAs ──────────────────────────────────────────────
+
+/** Global referral config PDA (settlement authority + treasury bump + swept). */
+export function findReferralConfig(programId: PublicKey): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync([REFERRAL_CONFIG_SEED], programId);
+}
+
+/** Global referral escrow PDA — the bounded payout pool (10 bps carve). */
+export function findReferralTreasury(programId: PublicKey): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync([REFERRAL_TREASURY_SEED], programId);
+}
+
+/** Per-referrer claim-watermark PDA. */
+export function findReferrerState(
+  programId: PublicKey,
+  referrer: PublicKey,
+): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync(
+    [REFERRER_SEED, referrer.toBuffer()],
     programId,
   );
 }

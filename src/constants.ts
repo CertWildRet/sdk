@@ -46,6 +46,17 @@ export const PENDING_TREASURY_SEED = Buffer.from("pending_treasury");
 /** Per-user parked-deposit ticket: PDA([PENDING_SEED, bucket_id, owner]). */
 export const PENDING_SEED = Buffer.from("pending");
 
+// ─── Referral program ────────────────────────────────────────────────────
+/** Global referral config PDA: PDA([REFERRAL_CONFIG_SEED]). */
+export const REFERRAL_CONFIG_SEED = Buffer.from("referral_config");
+/** Global referral escrow PDA (the bounded payout pool): PDA([REFERRAL_TREASURY_SEED]). */
+export const REFERRAL_TREASURY_SEED = Buffer.from("referral_treasury");
+/** Per-referrer claim-watermark PDA: PDA([REFERRER_SEED, referrer]). */
+export const REFERRER_SEED = Buffer.from("referrer");
+/** Fixed referral carve (bps of gross deploy volume) and the pull-fee ceiling. */
+export const REFERRAL_BPS = 10;
+export const REFERRAL_PULL_FEE_BPS = 110;
+
 // ─── External program ids (V6 non-custodial mining CPI targets) ──────────
 // VERIFIED on-chain constants — must match programs/cwr-vault/src/constants.rs
 // EXACTLY. A wrong id is a runtime CPI failure on mainnet.

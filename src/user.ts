@@ -1,7 +1,11 @@
 import BN from "bn.js";
+import * as anchor from "@coral-xyz/anchor";
 import {
+  Ed25519Program,
   Signer,
   SystemProgram,
+  SYSVAR_INSTRUCTIONS_PUBKEY,
+  Transaction,
   TransactionInstruction,
 } from "@solana/web3.js";
 import {
@@ -21,6 +25,9 @@ import {
   findPendingState,
   findPendingTreasury,
   findPosition,
+  findReferralConfig,
+  findReferralTreasury,
+  findReferrerState,
   oreMinerPda,
 } from "./pdas";
 
@@ -217,5 +224,45 @@ export class UserApi {
       })
       .signers([args.owner])
       .rpc();
+  }
+
+  /**
+   * Claim accrued referral rewards. The referrer signs and receives the payout.
+   * Authorized by a settlement-authority attestation of the referrer's
+   * CUMULATIVE owed (the off-chain claim API serves the message + signature);
+   * pays cumulative - claimed from the bounded referral_treasury. Idempotent:
+   * a stale/replayed attestation pays 0.
+   */
+  async claimReferral(args: {
+    referrer: Signer;
+    attestationMessage: Uint8Array;
+    attestationSignature: Uint8Array;
+  }): Promise<string> {
+    const [referralConfig] = findReferralConfig(this.c.programId);
+    const [referralTreasury] = findReferralTreasury(this.c.programId);
+    const [referrerState] = findReferrerState(this.c.programId, args.referrer.publicKey);
+    const rc: any = await this.c.program.account.referralConfig.fetch(referralConfig);
+    const edIx = Ed25519Program.createInstructionWithPublicKey({
+      publicKey: rc.settlementAuthority.toBytes(),
+      message: args.attestationMessage,
+      signature: args.attestationSignature,
+    });
+    const claimIx = await this.c.program.methods
+      .claimReferral()
+      .accountsPartial({
+        referrer: args.referrer.publicKey,
+        referrerState,
+        referralConfig,
+        referralTreasury,
+        systemProgram: SystemProgram.programId,
+        instructions: SYSVAR_INSTRUCTIONS_PUBKEY,
+      })
+      .instruction();
+    const tx = new Transaction().add(edIx, claimIx);
+    return (this.c.program.provider as anchor.AnchorProvider).sendAndConfirm(
+      tx,
+      [args.referrer],
+      { commitment: "confirmed" },
+    );
   }
 }

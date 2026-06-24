@@ -17,6 +17,8 @@ import {
   findMiningAuthority,
   findPendingState,
   findPendingTreasury,
+  findReferralConfig,
+  findReferralTreasury,
 } from "./pdas";
 import {
   FeeCosigner,
@@ -45,6 +47,51 @@ export class AdminApi {
       feeCosigner,
       admin,
     });
+  }
+
+  /**
+   * One-time global setup for the referral program (cosigned). Creates
+   * referral_config (settlement authority + treasury bump) and rent-seeds the
+   * bounded referral_treasury.
+   */
+  async initReferral(args: {
+    settlementAuthority: PublicKey;
+    admin: Signer;
+    feeCosigner: FeeCosigner;
+  }): Promise<string> {
+    const [referralConfig] = findReferralConfig(this.c.programId);
+    const [referralTreasury] = findReferralTreasury(this.c.programId);
+    const ix = await this.c.program.methods
+      .initReferral(args.settlementAuthority)
+      .accountsPartial({
+        config: this.c.configPda,
+        admin: args.admin.publicKey,
+        referralConfig,
+        referralTreasury,
+        systemProgram: SystemProgram.programId,
+        instructions: SYSVAR_INSTRUCTIONS_PUBKEY,
+      })
+      .instruction();
+    return this.cosign(ix, args.feeCosigner, args.admin);
+  }
+
+  /** Rotate the off-chain settlement authority (cosigned). Moves no funds. */
+  async setSettlementAuthority(args: {
+    newAuthority: PublicKey;
+    admin: Signer;
+    feeCosigner: FeeCosigner;
+  }): Promise<string> {
+    const [referralConfig] = findReferralConfig(this.c.programId);
+    const ix = await this.c.program.methods
+      .setSettlementAuthority(args.newAuthority)
+      .accountsPartial({
+        config: this.c.configPda,
+        admin: args.admin.publicKey,
+        referralConfig,
+        instructions: SYSVAR_INSTRUCTIONS_PUBKEY,
+      })
+      .instruction();
+    return this.cosign(ix, args.feeCosigner, args.admin);
   }
 
   async initialize(args: {

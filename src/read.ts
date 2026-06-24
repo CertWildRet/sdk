@@ -12,6 +12,9 @@ import {
   findPendingDeposit,
   findPendingState,
   findPendingTreasury,
+  findReferralConfig,
+  findReferralTreasury,
+  findReferrerState,
   findShareMint,
   findTreasury,
   oreMinerPda,
@@ -167,5 +170,27 @@ export class ReadApi {
     return this.c.program.account.pendingDeposit.all([
       { memcmp: { offset: 8 + 32, bytes: bucketByte } },
     ]);
+  }
+
+  // ─── Referral program reads ───────────────────────────────────────────
+
+  /** Global referral config (settlement authority + treasury bump + swept), or
+   *  null if `initReferral` was never run. */
+  async referralConfig(): Promise<any | null> {
+    const [pda] = findReferralConfig(this.c.programId);
+    return this.c.program.account.referralConfig.fetchNullable(pda);
+  }
+
+  /** Lamports in the bounded referral payout pool (incl. the rent seed). */
+  async referralTreasuryLamports(): Promise<BN> {
+    const [pda] = findReferralTreasury(this.c.programId);
+    const info = await this.c.connection.getAccountInfo(pda);
+    return new BN(info?.lamports ?? 0);
+  }
+
+  /** A referrer's claim watermark (`claimed` lamports), or null if never claimed. */
+  async referrerState(referrer: PublicKey): Promise<any | null> {
+    const [pda] = findReferrerState(this.c.programId, referrer);
+    return this.c.program.account.referrerState.fetchNullable(pda);
   }
 }

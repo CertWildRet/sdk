@@ -1,5 +1,14 @@
 import BN from "bn.js";
-import { ComputeBudgetProgram, PublicKey, Signer, SystemProgram } from "@solana/web3.js";
+import * as anchor from "@coral-xyz/anchor";
+import {
+  ComputeBudgetProgram,
+  Ed25519Program,
+  PublicKey,
+  Signer,
+  SystemProgram,
+  SYSVAR_INSTRUCTIONS_PUBKEY,
+  Transaction,
+} from "@solana/web3.js";
 import {
   ASSOCIATED_TOKEN_PROGRAM_ID,
   TOKEN_PROGRAM_ID,
@@ -26,6 +35,8 @@ import {
   findPendingState,
   findPendingTreasury,
   findPosition,
+  findReferralConfig,
+  findReferralTreasury,
   oreAutomationPda,
   oreBoardPda,
   oreConfigPda,
@@ -77,6 +88,7 @@ export class CrankApi {
     const addrs = deriveBucketAddresses(this.c.programId, args.bucket);
     const [feeBucket] = findFeeBucket(this.c.programId);
     const [feeSchedule] = findFeeSchedule(this.c.programId);
+    const [referralTreasury] = findReferralTreasury(this.c.programId);
     const [miningAuthority] = findMiningAuthority(this.c.programId, args.bucket);
     const [oreMiner] = oreMinerPda(miningAuthority);
     const [oreAutomation] = oreAutomationPda(miningAuthority);
@@ -97,6 +109,7 @@ export class CrankApi {
         miningAuthority,
         feeBucket,
         feeSchedule,
+        referralTreasury,
         oreMiner,
         oreAutomation,
         oreBoard,
@@ -330,5 +343,45 @@ export class CrankApi {
       .preInstructions(pre)
       .signers([args.finalizer])
       .rpc();
+  }
+
+  /**
+   * Sweep the protocol's surplus (carve on non-referred volume + dust) from
+   * referral_treasury -> fee_bucket. PERMISSIONLESS; authorized by a
+   * settlement-authority attestation of `target_cumulative` (the off-chain
+   * settlement service produces the message + signature). The relayer fee-pays.
+   */
+  async sweepReferralSurplus(args: {
+    relayer: Signer;
+    attestationMessage: Uint8Array;
+    attestationSignature: Uint8Array;
+  }): Promise<string> {
+    const [referralConfig] = findReferralConfig(this.c.programId);
+    const [referralTreasury] = findReferralTreasury(this.c.programId);
+    const [feeBucket] = findFeeBucket(this.c.programId);
+    const [feeSchedule] = findFeeSchedule(this.c.programId);
+    const rc: any = await this.c.program.account.referralConfig.fetch(referralConfig);
+    const edIx = Ed25519Program.createInstructionWithPublicKey({
+      publicKey: rc.settlementAuthority.toBytes(),
+      message: args.attestationMessage,
+      signature: args.attestationSignature,
+    });
+    const sweepIx = await this.c.program.methods
+      .sweepReferralSurplus()
+      .accountsPartial({
+        referralConfig,
+        referralTreasury,
+        feeBucket,
+        feeSchedule,
+        systemProgram: SystemProgram.programId,
+        instructions: SYSVAR_INSTRUCTIONS_PUBKEY,
+      })
+      .instruction();
+    const tx = new Transaction().add(edIx, sweepIx);
+    return (this.c.program.provider as anchor.AnchorProvider).sendAndConfirm(
+      tx,
+      [args.relayer],
+      { commitment: "confirmed" },
+    );
   }
 }
