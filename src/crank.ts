@@ -37,6 +37,7 @@ import {
   findPosition,
   findReferralConfig,
   findReferralTreasury,
+  findReferrerState,
   oreAutomationPda,
   oreBoardPda,
   oreConfigPda,
@@ -378,6 +379,49 @@ export class CrankApi {
       })
       .instruction();
     const tx = new Transaction().add(edIx, sweepIx);
+    return (this.c.program.provider as anchor.AnchorProvider).sendAndConfirm(
+      tx,
+      [args.relayer],
+      { commitment: "confirmed" },
+    );
+  }
+
+  /**
+   * PUSH a referrer their accrued rewards (the referrer does NOT sign). The
+   * relayer (keeper) signs + fee-pays; funds go to `referrer`. Authorized by a
+   * settlement-authority attestation (binds `referrer` + cumulative) — the same
+   * attestation a referrer would use to pull-claim, sharing the watermark so no
+   * double-collect. Drives both the "selective" (specific referrers) and "all
+   * opted-in" keeper payout modes (the mode = which referrers you loop over).
+   */
+  async distributeReferrals(args: {
+    relayer: Signer;
+    referrer: PublicKey;
+    attestationMessage: Uint8Array;
+    attestationSignature: Uint8Array;
+  }): Promise<string> {
+    const [referralConfig] = findReferralConfig(this.c.programId);
+    const [referralTreasury] = findReferralTreasury(this.c.programId);
+    const [referrerState] = findReferrerState(this.c.programId, args.referrer);
+    const rc: any = await this.c.program.account.referralConfig.fetch(referralConfig);
+    const edIx = Ed25519Program.createInstructionWithPublicKey({
+      publicKey: rc.settlementAuthority.toBytes(),
+      message: args.attestationMessage,
+      signature: args.attestationSignature,
+    });
+    const distIx = await this.c.program.methods
+      .distributeReferrals()
+      .accountsPartial({
+        relayer: args.relayer.publicKey,
+        referrer: args.referrer,
+        referrerState,
+        referralConfig,
+        referralTreasury,
+        systemProgram: SystemProgram.programId,
+        instructions: SYSVAR_INSTRUCTIONS_PUBKEY,
+      })
+      .instruction();
+    const tx = new Transaction().add(edIx, distIx);
     return (this.c.program.provider as anchor.AnchorProvider).sendAndConfirm(
       tx,
       [args.relayer],

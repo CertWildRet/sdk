@@ -1,6 +1,6 @@
 {
   "name": "@cwr/sdk",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "TypeScript SDK for the CWR multi-tranche vault on Solana. Wraps @cwr/abi with typed methods, PDA derivation, event subscriptions, and off-chain math previews.",
   "license": "MIT",
   "main": "dist/index.js",
