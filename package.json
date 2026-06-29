@@ -1,7 +1,7 @@
 {
   "name": "@cwr/sdk",
   "version": "0.4.0",
-  "description": "TypeScript SDK for the dORE multi-pool vault on Solana. Wraps @cwr/abi with typed methods, PDA derivation, event subscriptions, and off-chain math previews.",
+  "description": "TypeScript SDK for Diamond Pools, the multi-pool vault on Solana (dORE = exposure to ORE, dZINC = exposure to ZINC). Wraps @cwr/abi with typed methods, PDA derivation, event subscriptions, and off-chain math previews.",
   "license": "MIT",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
