@@ -161,21 +161,56 @@ export class CrankApi {
   }
 
   /**
-   * Claim accumulated ORE rewards and wrap them into stORE held by the bucket
-   * (CPI ClaimORE + ore-lst Wrap). Permissionless.
+   * dORE Stage 2: per-cycle settle. Claims the won SOL (working capital) and
+   * advances the two uORE accumulators from the GROWTH of the unclaimed miner
+   * legs (rewards_ore / refined_ore). Does NOT claim or wrap ORE - the miner is
+   * left unclaimed so refining compounds. Permissionless; the keeper runs it
+   * first in each OPEN window (deposit/withdraw are blocked until window_settled).
    *
-   * Wires SettleHarvest: bucket, treasury, mining_authority, store_treasury,
-   * mining_authority_ore_ata, mining_authority_store_ata, ore_mint, store_mint,
-   * ore_miner, ore_board, ore_treasury, ore_treasury_ore_ata, ore_program,
-   * ore_lst_vault, ore_lst_vault_ore_ata, ore_lst_stake, ore_lst_stake_ore_ata,
-   * ore_lst_treasury, ore_lst_treasury_ore_ata, ore_lst_vesting,
-   * ore_stake_program, caller, token_program, associated_token_program,
-   * system_program.
+   * Wires SettleUore (slim): bucket, treasury, mining_authority, ore_miner,
+   * ore_board, ore_program, caller, system_program.
    */
-  async settleHarvest(args: {
-    bucket: Bucket;
-    caller: Signer;
-  }): Promise<string> {
+  async settleUore(args: { bucket: Bucket; caller: Signer }): Promise<string> {
+    const addrs = deriveBucketAddresses(this.c.programId, args.bucket);
+    const [miningAuthority] = findMiningAuthority(this.c.programId, args.bucket);
+    const [oreMiner] = oreMinerPda(miningAuthority);
+    const [oreBoard] = oreBoardPda();
+
+    return this.c.program.methods
+      .settleUore()
+      .accountsPartial({
+        bucket: addrs.bucket,
+        treasury: addrs.treasury,
+        miningAuthority,
+        oreMiner,
+        oreBoard,
+        oreProgram: ORE_PROGRAM_ID,
+        caller: args.caller.publicKey,
+        systemProgram: SystemProgram.programId,
+      })
+      // ClaimSOL + read_miner + two accumulator advances; modest CU, but raise
+      // the ceiling defensively (free - no CU price set).
+      .preInstructions([ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 })])
+      .signers([args.caller])
+      .rpc();
+  }
+
+  /**
+   * dORE Stage 2: operator-gated reserve top-up. Claims the WHOLE unclaimed
+   * miner (all-or-nothing ClaimORE) + ore-lst Wraps it to stORE folded into the
+   * bucket's reserve. The ONLY claim+wrap site; operator-gated so the 10% claim
+   * fee / refining reset cannot be griefed. Run on a low-water trigger and
+   * before serving any exit the current reserve cannot cover.
+   *
+   * Wires BatchReplenish (same account set as the old harvest, operator-signed):
+   * bucket, treasury, mining_authority, store_treasury, mining_authority_ore_ata,
+   * mining_authority_store_ata, ore_mint, store_mint, ore_miner, ore_board,
+   * ore_treasury, ore_treasury_ore_ata, ore_program, ore_lst_vault,
+   * ore_lst_vault_ore_ata, ore_lst_stake, ore_lst_stake_ore_ata, ore_lst_treasury,
+   * ore_lst_treasury_ore_ata, ore_lst_vesting, ore_stake_program, ore_lst_program,
+   * operator, token_program, associated_token_program, system_program.
+   */
+  async batchReplenish(args: { bucket: Bucket; operator: Signer }): Promise<string> {
     const addrs = deriveBucketAddresses(this.c.programId, args.bucket);
     const [miningAuthority] = findMiningAuthority(this.c.programId, args.bucket);
     const [oreMiner] = oreMinerPda(miningAuthority);
@@ -186,27 +221,15 @@ export class CrankApi {
     const [oreLstTreasury] = oreStakeTreasuryPda();
     const [oreLstVesting] = oreStakeVestingPda();
 
-    const miningAuthorityOreAta = getAssociatedTokenAddressSync(
-      ORE_MINT,
-      miningAuthority,
-      true,
-    );
-    const miningAuthorityStoreAta = getAssociatedTokenAddressSync(
-      STORE_MINT,
-      miningAuthority,
-      true,
-    );
+    const miningAuthorityOreAta = getAssociatedTokenAddressSync(ORE_MINT, miningAuthority, true);
+    const miningAuthorityStoreAta = getAssociatedTokenAddressSync(STORE_MINT, miningAuthority, true);
     const oreTreasuryOreAta = getAssociatedTokenAddressSync(ORE_MINT, oreTreasury, true);
     const oreLstVaultOreAta = getAssociatedTokenAddressSync(ORE_MINT, oreLstVault, true);
     const oreLstStakeOreAta = getAssociatedTokenAddressSync(ORE_MINT, oreLstStake, true);
-    const oreLstTreasuryOreAta = getAssociatedTokenAddressSync(
-      ORE_MINT,
-      oreLstTreasury,
-      true,
-    );
+    const oreLstTreasuryOreAta = getAssociatedTokenAddressSync(ORE_MINT, oreLstTreasury, true);
 
     return this.c.program.methods
-      .settleHarvest()
+      .batchReplenish()
       .accountsPartial({
         bucket: addrs.bucket,
         treasury: addrs.treasury,
@@ -230,16 +253,15 @@ export class CrankApi {
         oreLstVesting,
         oreStakeProgram: ORE_STAKE_PROGRAM_ID,
         oreLstProgram: ORE_LST_PROGRAM_ID,
-        caller: args.caller.publicKey,
+        operator: args.operator.publicKey,
         tokenProgram: TOKEN_PROGRAM_ID,
         associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
         systemProgram: SystemProgram.programId,
       })
-      // settle does a lot in one tx (up to 2 ATA creates + ClaimSOL + ClaimORE +
-      // the 17-account ore-lst Wrap), well past the 200k default CU. Raise the
-      // ceiling (free - no CU price set, so no extra priority fee).
+      // ClaimORE + the 17-account ore-lst Wrap + up to 2 ATA creates: well past
+      // the 200k default CU. Raise the ceiling (free - no CU price set).
       .preInstructions([ComputeBudgetProgram.setComputeUnitLimit({ units: 1_000_000 })])
-      .signers([args.caller])
+      .signers([args.operator])
       .rpc();
   }
 

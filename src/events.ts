@@ -27,7 +27,8 @@ export type CwrEventName =
   | "MiningPdaInitializedEvent"
   | "CrankMineEvent"
   | "CheckpointEvent"
-  | "SettleHarvestEvent"
+  | "SettleUoreEvent"
+  | "BatchReplenishEvent"
   | "PhaseChangedEvent";
 
 export type EventHandler<T = any> = (event: T, slot: number, signature: string) => void;
@@ -61,8 +62,12 @@ export class EventsApi {
     return this.on("CheckpointEvent", handler);
   }
 
-  onSettleHarvest(handler: EventHandler) {
-    return this.on("SettleHarvestEvent", handler);
+  onSettleUore(handler: EventHandler) {
+    return this.on("SettleUoreEvent", handler);
+  }
+
+  onBatchReplenish(handler: EventHandler) {
+    return this.on("BatchReplenishEvent", handler);
   }
 
   onPhaseChanged(handler: EventHandler) {

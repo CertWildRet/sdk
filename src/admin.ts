@@ -134,14 +134,38 @@ export class AdminApi {
     bucketId: number;
     params: BucketParamsInput;
     operatorWallet: PublicKey;
+    // dORE: on-chain SPL token metadata for this pool's share mint
+    // (bucket 0 -> "dORE", bucket 1 -> "dZINC"). name <=32, symbol <=10, uri <=200.
+    name: string;
+    symbol: string;
+    uri: string;
     admin: Signer;
     feeCosigner: FeeCosigner;
   }): Promise<string> {
     const addrs = deriveBucketAddresses(this.c.programId, args.bucketId);
     // Read cfg to find the storeMint pinned at initialize-time.
     const cfg = await this.c.program.account.config.fetch(this.c.configPda);
+    // Metaplex Token-Metadata program + the metadata PDA for the share mint.
+    const TOKEN_METADATA_PROGRAM_ID = new PublicKey(
+      "metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s",
+    );
+    const [metadata] = PublicKey.findProgramAddressSync(
+      [
+        Buffer.from("metadata"),
+        TOKEN_METADATA_PROGRAM_ID.toBuffer(),
+        addrs.shareMint.toBuffer(),
+      ],
+      TOKEN_METADATA_PROGRAM_ID,
+    );
     const ix = await this.c.program.methods
-      .initBucket(args.bucketId, args.params as any, args.operatorWallet)
+      .initBucket(
+        args.bucketId,
+        args.params as any,
+        args.operatorWallet,
+        args.name,
+        args.symbol,
+        args.uri,
+      )
       .accountsPartial({
         config: this.c.configPda,
         admin: args.admin.publicKey,
@@ -150,6 +174,8 @@ export class AdminApi {
         shareMint: addrs.shareMint,
         storeTreasury: addrs.storeTreasury,
         storeMint: cfg.storeMint,
+        metadata,
+        tokenMetadataProgram: TOKEN_METADATA_PROGRAM_ID,
         tokenProgram: TOKEN_PROGRAM_ID,
         systemProgram: SystemProgram.programId,
         rent: anchor.web3.SYSVAR_RENT_PUBKEY,

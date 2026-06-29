@@ -1,7 +1,7 @@
 {
   "name": "@cwr/sdk",
-  "version": "0.3.0",
-  "description": "TypeScript SDK for the CWR multi-tranche vault on Solana. Wraps @cwr/abi with typed methods, PDA derivation, event subscriptions, and off-chain math previews.",
+  "version": "0.4.0",
+  "description": "TypeScript SDK for the dORE multi-pool vault on Solana. Wraps @cwr/abi with typed methods, PDA derivation, event subscriptions, and off-chain math previews.",
   "license": "MIT",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -20,7 +20,7 @@
   },
   "dependencies": {
     "@coral-xyz/anchor": "^0.31.1",
-    "@cwr/abi": "github:CertWildRet/abi#5f81925beff8efd5d38bc05e0cffff1e9aa890b0",
+    "@cwr/abi": "github:CertWildRet/abi#main",
     "@solana/spl-token": "^0.4.14",
     "@solana/web3.js": "^1.95.0",
     "bn.js": "^5.2.3"
