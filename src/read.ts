@@ -18,6 +18,8 @@ import {
   findShareMint,
   findTreasury,
   oreMinerPda,
+  zincPoolPda,
+  zincPositionPda,
 } from "./pdas";
 import {
   navPerShare as computeNavPerShare,
@@ -192,5 +194,27 @@ export class ReadApi {
   async referrerState(referrer: PublicKey): Promise<any | null> {
     const [pda] = findReferrerState(this.c.programId, referrer);
     return this.c.program.account.referrerState.fetchNullable(pda);
+  }
+
+  // ─── dZINC pool (bucket 1) reads ──────────────────────────────────────
+
+  /**
+   * The per-bucket dZINC pool sidecar (ZincPool), or null if `initZincPool`
+   * was never run for this bucket. Its existence is what makes a bucket a
+   * dZINC pool. Holds the smelted-ZINC-per-share accumulator, custody mirror,
+   * caps, and the cached zinc_profile / zinc_custody_ata pubkeys.
+   */
+  async zincPool(bucket: Bucket): Promise<any | null> {
+    const [pda] = zincPoolPda(this.c.programId, bucket);
+    return this.c.program.account.zincPool.fetchNullable(pda);
+  }
+
+  /**
+   * A single owner's dZINC position (reward-debt watermark + carried grams),
+   * or null if the owner never deposited into the dZINC pool.
+   */
+  async zincPosition(bucket: Bucket, owner: PublicKey): Promise<any | null> {
+    const [pda] = zincPositionPda(this.c.programId, bucket, owner);
+    return this.c.program.account.zincPosition.fetchNullable(pda);
   }
 }

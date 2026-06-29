@@ -1,5 +1,6 @@
 import BN from "bn.js";
 import { PublicKey } from "@solana/web3.js";
+import { getAssociatedTokenAddressSync } from "@solana/spl-token";
 import {
   BUCKET_SEED,
   CONFIG_SEED,
@@ -29,6 +30,20 @@ import {
   SHARE_MINT_SEED,
   STORE_TREASURY_SEED,
   TREASURY_SEED,
+  ZINC_ATA_PROGRAM,
+  ZINC_MINT,
+  ZINC_POOL_SEED,
+  ZINC_POSITION_SEED,
+  ZINC_PROGRAM_ID,
+  ZINC_SEED_BONANZA_SOL_VAULT,
+  ZINC_SEED_BUYBACK_SOL_VAULT,
+  ZINC_SEED_MINER,
+  ZINC_SEED_PLAYER_PROFILE,
+  ZINC_SEED_ROUND,
+  ZINC_SEED_ROUND_REWARD_TA,
+  ZINC_SEED_STOCKPILE_SOL_VAULT,
+  ZINC_SEED_TREASURY,
+  ZINC_TOKEN_PROGRAM,
 } from "./constants";
 
 export function findConfig(programId: PublicKey): [PublicKey, number] {
@@ -278,5 +293,131 @@ export function oreStakeVestingPda(): [PublicKey, number] {
   return PublicKey.findProgramAddressSync(
     [ORE_STAKE_SEED_VESTING],
     ORE_STAKE_PROGRAM_ID,
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// dZINC pool (bucket 1) PDAs.
+//
+// cwr-program PDAs (under `programId`):
+//   - zinc pool:     PDA([ZINC_POOL_SEED, bucket_id])
+//   - zinc position: PDA([ZINC_POSITION_SEED, bucket_id, owner])
+//
+// External ZINC PDAs - these MUST mirror programs/cwr-vault/src/zinc_cpi.rs
+// EXACTLY. A wrong seed/program is a runtime CPI failure on mainnet. ZINC is
+// not an Anchor program, so none of these are auto-resolvable by the IDL.
+// ════════════════════════════════════════════════════════════════════════
+
+/** Per-bucket dZINC pool sidecar PDA (== the ZincPool account). */
+export function zincPoolPda(
+  programId: PublicKey,
+  bucketId: number,
+): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync(
+    [ZINC_POOL_SEED, Buffer.from([bucketId])],
+    programId,
+  );
+}
+
+/** Per-user dZINC position PDA (reward-debt watermark + carried grams). */
+export function zincPositionPda(
+  programId: PublicKey,
+  bucketId: number,
+  owner: PublicKey,
+): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync(
+    [ZINC_POSITION_SEED, Buffer.from([bucketId]), owner.toBuffer()],
+    programId,
+  );
+}
+
+// ─── External ZINC program PDAs (mirror zinc_cpi.rs) ─────────────────────
+
+/** ZINC round PDA for a given round id (u64 LE): PDA([b"round", round_id]). */
+export function zincRoundPda(roundId: BN): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync(
+    [ZINC_SEED_ROUND, roundId.toArrayLike(Buffer, "le", 8)],
+    ZINC_PROGRAM_ID,
+  );
+}
+
+/** ZINC miner PDA for a (round_id, player): PDA([b"miner", round_id, player]).
+ *  `player` is the per-bucket mining authority PDA. */
+export function zincMinerPda(
+  roundId: BN,
+  player: PublicKey,
+): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync(
+    [ZINC_SEED_MINER, roundId.toArrayLike(Buffer, "le", 8), player.toBuffer()],
+    ZINC_PROGRAM_ID,
+  );
+}
+
+/** ZINC player-profile PDA for a player: PDA([b"player-profile", player]). */
+export function zincPlayerProfilePda(player: PublicKey): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync(
+    [ZINC_SEED_PLAYER_PROFILE, player.toBuffer()],
+    ZINC_PROGRAM_ID,
+  );
+}
+
+/** ZINC stockpile SOL vault PDA (singleton): PDA([b"stockpile-sol-vault"]). */
+export function zincStockpileSolVaultPda(): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync(
+    [ZINC_SEED_STOCKPILE_SOL_VAULT],
+    ZINC_PROGRAM_ID,
+  );
+}
+
+/** ZINC bonanza SOL vault PDA (singleton): PDA([b"bonanza-sol-vault"]). */
+export function zincBonanzaSolVaultPda(): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync(
+    [ZINC_SEED_BONANZA_SOL_VAULT],
+    ZINC_PROGRAM_ID,
+  );
+}
+
+/** ZINC buyback SOL vault PDA (singleton): PDA([b"buyback-sol-vault"]). */
+export function zincBuybackSolVaultPda(): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync(
+    [ZINC_SEED_BUYBACK_SOL_VAULT],
+    ZINC_PROGRAM_ID,
+  );
+}
+
+/** ZINC round-zinc-reward token account PDA (smelt source):
+ *  PDA([b"treasury", b"round-zinc-reward-token-account"]). */
+export function zincRoundRewardTokenAccountPda(): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync(
+    [ZINC_SEED_TREASURY, ZINC_SEED_ROUND_REWARD_TA],
+    ZINC_PROGRAM_ID,
+  );
+}
+
+/**
+ * The dZINC custody ATA = ATA(mining_authority, ZINC_MINT) under the CLASSIC
+ * SPL token program (the ZINC mint is a classic Token mint, not Token-2022).
+ * This is the smelt destination + in-kind withdraw source. `allowOwnerOffCurve`
+ * is true because the owner is a PDA. Mirrors zinc_cpi::zinc_player_ata.
+ */
+export function zincCustodyAta(miningAuthority: PublicKey): PublicKey {
+  return getAssociatedTokenAddressSync(
+    ZINC_MINT,
+    miningAuthority,
+    true,
+    ZINC_TOKEN_PROGRAM,
+    ZINC_ATA_PROGRAM,
+  );
+}
+
+/** A holder's own ZINC ATA (classic SPL token program). The in-kind
+ *  withdraw_zinc payout destination. */
+export function zincUserAta(owner: PublicKey): PublicKey {
+  return getAssociatedTokenAddressSync(
+    ZINC_MINT,
+    owner,
+    false,
+    ZINC_TOKEN_PROGRAM,
+    ZINC_ATA_PROGRAM,
   );
 }

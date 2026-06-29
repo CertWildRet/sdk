@@ -24,6 +24,13 @@ import {
   ORE_PROGRAM_ID,
   ORE_STAKE_PROGRAM_ID,
   STORE_MINT,
+  ZINC_ATA_PROGRAM,
+  ZINC_BOARD,
+  ZINC_CONFIG,
+  ZINC_MINT,
+  ZINC_PROGRAM_ID,
+  ZINC_TOKEN_PROGRAM,
+  ZINC_TREASURY,
 } from "./constants";
 import { CwrVaultClient } from "./client";
 import {
@@ -48,6 +55,15 @@ import {
   oreStakeTreasuryPda,
   oreStakeVestingPda,
   oreTreasuryPda,
+  zincBonanzaSolVaultPda,
+  zincBuybackSolVaultPda,
+  zincCustodyAta,
+  zincMinerPda,
+  zincPlayerProfilePda,
+  zincPoolPda,
+  zincRoundPda,
+  zincRoundRewardTokenAccountPda,
+  zincStockpileSolVaultPda,
 } from "./pdas";
 
 const ALL_SQUARES: boolean[] = Array.from({ length: 25 }, () => true);
@@ -300,6 +316,190 @@ export class CrankApi {
       .closeWindow()
       .accountsPartial({
         bucket: addrs.bucket,
+        caller: args.caller.publicKey,
+      })
+      .signers([args.caller])
+      .rpc();
+  }
+
+  // ════════════════════════════════════════════════════════════════════
+  // dZINC pool (bucket 1) crank / harvest / window. Operator-signed crank +
+  // permissionless harvest/window, mirroring the dORE crankMine / settleUore /
+  // openWindow / closeWindow. The bucket's `mining_authority` PDA is the ZINC
+  // player + Deploy/smelt CPI signer (invoke_signed).
+  // ════════════════════════════════════════════════════════════════════
+
+  /**
+   * Deploy `amount` SOL into the ZINC board for `round_id` (CPI Deploy). The
+   * operator (== `bucket.operator_wallet`, the SAME operator as the dORE pool)
+   * signs the OUTER crank - it controls WHEN, never WHERE. ZINC deploys a
+   * single net total via an ENCRYPTED mask that the keeper precomputes
+   * off-chain (Arcium X25519+Rescue to the live MXE key) and threads in as
+   * args; there is no 25-square split. `amount` is the gross SOL (the program
+   * skims the 1% volume fee + the referral carve, then deploys the net).
+   *
+   * `stockpile` is keeper-supplied: the live stockpile PDA when
+   * `board.active_stockpile_id` is Some, else the ZINC_PROGRAM_ID sentinel.
+   * Passing the sentinel while a stockpile is active fails on-chain with
+   * MissingCurrentStockpile, so the keeper must read the board first.
+   *
+   * Wires CrankMineZinc: config, operator, bucket, operator_wallet, zinc_pool,
+   * treasury, mining_authority, fee_bucket, fee_schedule, referral_treasury,
+   * zinc_program, zinc_round(round_id), zinc_config, zinc_miner(round_id,
+   * mining_authority), zinc_player_profile(mining_authority), zinc_board,
+   * zinc_treasury, zinc_stockpile_sol_vault, zinc_bonanza_sol_vault,
+   * zinc_buyback_sol_vault, zinc_stockpile, system_program.
+   */
+  async crankMineZinc(args: {
+    bucket: Bucket;
+    amount: BN;
+    roundId: BN;
+    maskEncryptionKey: number[] | Uint8Array;
+    maskNonce: BN;
+    maskCiphertext: number[] | Uint8Array;
+    /** Live stockpile PDA (board.active_stockpile_id) or the ZINC_PROGRAM_ID
+     *  sentinel. Keeper-supplied; cannot be PDA-pinned (ZINC validates it). */
+    stockpile: PublicKey;
+    operator: Signer;
+  }): Promise<string> {
+    const addrs = deriveBucketAddresses(this.c.programId, args.bucket);
+    const [zincPool] = zincPoolPda(this.c.programId, args.bucket);
+    const [feeBucket] = findFeeBucket(this.c.programId);
+    const [feeSchedule] = findFeeSchedule(this.c.programId);
+    const [referralTreasury] = findReferralTreasury(this.c.programId);
+    const [miningAuthority] = findMiningAuthority(this.c.programId, args.bucket);
+    const [zincRound] = zincRoundPda(args.roundId);
+    const [zincMiner] = zincMinerPda(args.roundId, miningAuthority);
+    const [zincPlayerProfile] = zincPlayerProfilePda(miningAuthority);
+    const [zincStockpileSolVault] = zincStockpileSolVaultPda();
+    const [zincBonanzaSolVault] = zincBonanzaSolVaultPda();
+    const [zincBuybackSolVault] = zincBuybackSolVaultPda();
+
+    const maskKey = Array.from(args.maskEncryptionKey);
+    const maskCt = Array.from(args.maskCiphertext);
+
+    return this.c.program.methods
+      .crankMineZinc(
+        args.amount,
+        args.roundId,
+        maskKey as any,
+        args.maskNonce,
+        maskCt as any,
+      )
+      .accountsPartial({
+        config: this.c.configPda,
+        operator: args.operator.publicKey,
+        bucket: addrs.bucket,
+        operatorWallet: args.operator.publicKey,
+        zincPool,
+        treasury: addrs.treasury,
+        miningAuthority,
+        feeBucket,
+        feeSchedule,
+        referralTreasury,
+        zincProgram: ZINC_PROGRAM_ID,
+        zincRound,
+        zincConfig: ZINC_CONFIG,
+        zincMiner,
+        zincPlayerProfile,
+        zincBoard: ZINC_BOARD,
+        zincTreasury: ZINC_TREASURY,
+        zincStockpileSolVault,
+        zincBonanzaSolVault,
+        zincBuybackSolVault,
+        zincStockpile: args.stockpile,
+        systemProgram: SystemProgram.programId,
+      })
+      // The ZINC Deploy CPI (lazy miner/profile creation + the encrypted mask)
+      // is well past the 200k default CU. Raise the ceiling (free - no CU price).
+      .preInstructions([ComputeBudgetProgram.setComputeUnitLimit({ units: 800_000 })])
+      .signers([args.operator])
+      .rpc();
+  }
+
+  /**
+   * dZINC harvest: claim the round's won SOL (working capital) and SMELT the
+   * accrued ZINC (-10%) into the custody ATA (HOLD path), advancing the
+   * pool's smelted-ZINC-per-share accumulator over the blended total_shares.
+   * Mirrors `settleUore` (permissionless; the keeper runs it first each OPEN
+   * window before deposits/withdrawals are served). Skips the claim/smelt CPI
+   * when nothing accrued, so a losing/zero round never bricks the barrier.
+   *
+   * Wires SettleHarvestZinc: bucket, zinc_pool, treasury, mining_authority,
+   * zinc_custody_ata, zinc_mint, zinc_player_profile(mining_authority),
+   * zinc_config, zinc_treasury, zinc_round_zinc_reward_token_account,
+   * zinc_program, caller, token_program, associated_token_program,
+   * system_program.
+   */
+  async settleHarvestZinc(args: { bucket: Bucket; caller: Signer }): Promise<string> {
+    const addrs = deriveBucketAddresses(this.c.programId, args.bucket);
+    const [zincPool] = zincPoolPda(this.c.programId, args.bucket);
+    const [miningAuthority] = findMiningAuthority(this.c.programId, args.bucket);
+    const custodyAta = zincCustodyAta(miningAuthority);
+    const [zincPlayerProfile] = zincPlayerProfilePda(miningAuthority);
+    const [zincRewardTa] = zincRoundRewardTokenAccountPda();
+
+    return this.c.program.methods
+      .settleHarvestZinc()
+      .accountsPartial({
+        bucket: addrs.bucket,
+        zincPool,
+        treasury: addrs.treasury,
+        miningAuthority,
+        zincCustodyAta: custodyAta,
+        zincMint: ZINC_MINT,
+        zincPlayerProfile,
+        zincConfig: ZINC_CONFIG,
+        zincTreasury: ZINC_TREASURY,
+        zincRoundZincRewardTokenAccount: zincRewardTa,
+        zincProgram: ZINC_PROGRAM_ID,
+        caller: args.caller.publicKey,
+        tokenProgram: ZINC_TOKEN_PROGRAM,
+        associatedTokenProgram: ZINC_ATA_PROGRAM,
+        systemProgram: SystemProgram.programId,
+      })
+      // claim SOL + smelt CPI + accumulator advance + (first-settle) ATA create.
+      .preInstructions([ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 })])
+      .signers([args.caller])
+      .rpc();
+  }
+
+  /**
+   * Transition a dZINC bucket into its OPEN window (deposits + withdrawals).
+   * Permissionless. Mirrors `openWindow` but reads the ZincPool (no ore_miner).
+   *
+   * Wires OpenWindowZinc: bucket, zinc_pool, caller.
+   */
+  async openWindowZinc(args: { bucket: Bucket; caller: Signer }): Promise<string> {
+    const addrs = deriveBucketAddresses(this.c.programId, args.bucket);
+    const [zincPool] = zincPoolPda(this.c.programId, args.bucket);
+
+    return this.c.program.methods
+      .openWindowZinc()
+      .accountsPartial({
+        bucket: addrs.bucket,
+        zincPool,
+        caller: args.caller.publicKey,
+      })
+      .signers([args.caller])
+      .rpc();
+  }
+
+  /**
+   * Transition a dZINC bucket into its BETTING window (ZINC mining live;
+   * deposits + withdrawals closed). Permissionless. Mirrors `closeWindow`.
+   *
+   * Wires CloseWindowZinc: bucket, zinc_pool, caller.
+   */
+  async closeWindowZinc(args: { bucket: Bucket; caller: Signer }): Promise<string> {
+    const addrs = deriveBucketAddresses(this.c.programId, args.bucket);
+    const [zincPool] = zincPoolPda(this.c.programId, args.bucket);
+
+    return this.c.program.methods
+      .closeWindowZinc()
+      .accountsPartial({
+        bucket: addrs.bucket,
+        zincPool,
         caller: args.caller.publicKey,
       })
       .signers([args.caller])

@@ -13,7 +13,12 @@ import {
   createAssociatedTokenAccountIdempotentInstruction,
   getAssociatedTokenAddressSync,
 } from "@solana/spl-token";
-import { Bucket } from "./constants";
+import {
+  Bucket,
+  ZINC_ATA_PROGRAM,
+  ZINC_MINT,
+  ZINC_TOKEN_PROGRAM,
+} from "./constants";
 import { CwrVaultClient } from "./client";
 import {
   deriveBucketAddresses,
@@ -29,6 +34,10 @@ import {
   findReferralTreasury,
   findReferrerState,
   oreMinerPda,
+  zincCustodyAta,
+  zincPoolPda,
+  zincPositionPda,
+  zincUserAta,
 } from "./pdas";
 
 export class UserApi {
@@ -150,6 +159,154 @@ export class UserApi {
         userStoreAta,
         storeMint: cfg.storeMint,
         tokenProgram: TOKEN_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+      })
+      .preInstructions(pre)
+      .signers([args.user])
+      .rpc();
+  }
+
+  // ════════════════════════════════════════════════════════════════════
+  // dZINC pool (bucket 1) deposit / withdraw. Mirror deposit / withdraw but
+  // route through the ZincPool + per-user ZincPosition; withdraw pays the
+  // pro-rata SMELTED ZINC in-kind (no stORE leg, no ore_miner).
+  // ════════════════════════════════════════════════════════════════════
+
+  /**
+   * Deposit lamports into a dZINC bucket and receive (dZINC) shares. Creates
+   * the user's share-token ATA idempotently if missing. The V5 entry fee is
+   * skimmed from `amount` into the global fee bucket BEFORE shares are minted.
+   * Threads the per-user ZincPosition PDA (created lazily on first deposit),
+   * which is set to the pool's CURRENT acc_zinc_per_share watermark (no
+   * backdating of pre-deposit smelted ZINC). No ore_miner is involved.
+   *
+   * Wires DepositZinc: config, bucket, zinc_pool, treasury, share_mint,
+   * user_share_ata, user, zinc_position, fee_bucket, fee_schedule,
+   * token_program, system_program.
+   */
+  async depositZinc(args: {
+    bucket: Bucket;
+    amount: BN;
+    user: Signer;
+  }): Promise<string> {
+    const addrs = deriveBucketAddresses(this.c.programId, args.bucket);
+    const [zincPool] = zincPoolPda(this.c.programId, args.bucket);
+    const [zincPosition] = zincPositionPda(
+      this.c.programId,
+      args.bucket,
+      args.user.publicKey,
+    );
+    const [feeSchedule] = findFeeSchedule(this.c.programId);
+    const [feeBucket] = findFeeBucket(this.c.programId);
+    const userShareAta = getAssociatedTokenAddressSync(
+      addrs.shareMint,
+      args.user.publicKey,
+    );
+
+    const pre: TransactionInstruction[] = [];
+    const ataInfo = await this.c.connection.getAccountInfo(userShareAta);
+    if (!ataInfo) {
+      pre.push(
+        createAssociatedTokenAccountIdempotentInstruction(
+          args.user.publicKey,
+          userShareAta,
+          args.user.publicKey,
+          addrs.shareMint,
+        ),
+      );
+    }
+
+    return this.c.program.methods
+      .depositZinc(args.amount)
+      .accountsPartial({
+        config: this.c.configPda,
+        bucket: addrs.bucket,
+        zincPool,
+        treasury: addrs.treasury,
+        shareMint: addrs.shareMint,
+        userShareAta,
+        user: args.user.publicKey,
+        zincPosition,
+        feeBucket,
+        feeSchedule,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+      })
+      .preInstructions(pre)
+      .signers([args.user])
+      .rpc();
+  }
+
+  /**
+   * Burn dZINC shares and withdraw the underlying SOL payout (minus the V5 flat
+   * exit fee -> global fee bucket) PLUS the pro-rata SMELTED ZINC paid IN-KIND
+   * from the custody ATA into the user's ZINC ATA. Mirrors `withdraw` but with
+   * the ZINC leg instead of stORE. Only callable while `claims_open`. The
+   * user's ZINC ATA (classic SPL token program) is created idempotently so the
+   * in-kind transfer cannot fail.
+   *
+   * Wires WithdrawZinc: bucket, zinc_pool, treasury, share_mint,
+   * user_share_ata, user, zinc_position, fee_bucket, fee_schedule, config,
+   * mining_authority, zinc_custody_ata, user_zinc_ata, zinc_mint,
+   * token_program, system_program.
+   */
+  async withdrawZinc(args: {
+    bucket: Bucket;
+    shares: BN;
+    user: Signer;
+  }): Promise<string> {
+    const addrs = deriveBucketAddresses(this.c.programId, args.bucket);
+    const [zincPool] = zincPoolPda(this.c.programId, args.bucket);
+    const [zincPosition] = zincPositionPda(
+      this.c.programId,
+      args.bucket,
+      args.user.publicKey,
+    );
+    const [feeSchedule] = findFeeSchedule(this.c.programId);
+    const [feeBucket] = findFeeBucket(this.c.programId);
+    const [miningAuthority] = findMiningAuthority(this.c.programId, args.bucket);
+    const custodyAta = zincCustodyAta(miningAuthority);
+    const userShareAta = getAssociatedTokenAddressSync(
+      addrs.shareMint,
+      args.user.publicKey,
+    );
+    const userZincAta = zincUserAta(args.user.publicKey);
+
+    // Idempotently ensure the user's ZINC ATA (classic SPL token program)
+    // exists so the in-kind smelted-ZINC payout can land.
+    const pre: TransactionInstruction[] = [];
+    const zincAtaInfo = await this.c.connection.getAccountInfo(userZincAta);
+    if (!zincAtaInfo) {
+      pre.push(
+        createAssociatedTokenAccountIdempotentInstruction(
+          args.user.publicKey,
+          userZincAta,
+          args.user.publicKey,
+          ZINC_MINT,
+          ZINC_TOKEN_PROGRAM,
+          ZINC_ATA_PROGRAM,
+        ),
+      );
+    }
+
+    return this.c.program.methods
+      .withdrawZinc(args.shares)
+      .accountsPartial({
+        bucket: addrs.bucket,
+        zincPool,
+        treasury: addrs.treasury,
+        shareMint: addrs.shareMint,
+        userShareAta,
+        user: args.user.publicKey,
+        zincPosition,
+        feeBucket,
+        feeSchedule,
+        config: this.c.configPda,
+        miningAuthority,
+        zincCustodyAta: custodyAta,
+        userZincAta,
+        zincMint: ZINC_MINT,
+        tokenProgram: ZINC_TOKEN_PROGRAM,
         systemProgram: SystemProgram.programId,
       })
       .preInstructions(pre)

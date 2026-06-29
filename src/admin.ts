@@ -7,7 +7,13 @@ import {
   TransactionInstruction,
 } from "@solana/web3.js";
 import { TOKEN_PROGRAM_ID } from "@solana/spl-token";
-import { Bucket, MAX_FEE_RECIPIENTS } from "./constants";
+import {
+  Bucket,
+  MAX_FEE_RECIPIENTS,
+  ZINC_ATA_PROGRAM,
+  ZINC_MINT,
+  ZINC_TOKEN_PROGRAM,
+} from "./constants";
 import { CwrVaultClient } from "./client";
 import {
   deriveBucketAddresses,
@@ -19,6 +25,8 @@ import {
   findPendingTreasury,
   findReferralConfig,
   findReferralTreasury,
+  zincCustodyAta,
+  zincPoolPda,
 } from "./pdas";
 import {
   FeeCosigner,
@@ -658,5 +666,142 @@ export class AdminApi {
       .remainingAccounts(remaining)
       .signers([args.caller])
       .rpc();
+  }
+
+  // ════════════════════════════════════════════════════════════════════
+  // dZINC pool (bucket 1) admin. All cosigned, mirroring initBucket /
+  // setBucketOperator (the same fee-holder Ed25519 second factor).
+  // ════════════════════════════════════════════════════════════════════
+
+  /**
+   * One-time setup of a bucket's dZINC pool sidecar (cosigned). Mirrors
+   * `initMiningPda` for ORE: pins the bucket's `mining_authority` PDA as the
+   * ZINC player / CPI signer + SOL escrow (so a bucket can be EITHER an ORE or
+   * a ZINC pool, never both - the first init to claim mining_authority wins),
+   * creates the ZincPool account + the custody ZINC ATA, and seeds the mining
+   * authority rent-exempt. `minRoundLamports = 0` falls back to the pool
+   * default; `maxInflightLamports` is the per-window SOL exposure ceiling
+   * (<= MAX_ZINC_INFLIGHT_CEIL, validated on-chain).
+   *
+   * Wires InitZincPool: config, admin, bucket, zinc_pool, mining_authority,
+   * zinc_mint, zinc_custody_ata, instructions, token_program,
+   * associated_token_program, system_program.
+   */
+  async initZincPool(args: {
+    bucket: Bucket;
+    minRoundLamports: anchor.BN | number;
+    maxInflightLamports: anchor.BN | number;
+    admin: Signer;
+    feeCosigner: FeeCosigner;
+  }): Promise<string> {
+    const [bucketPda] = findBucket(this.c.programId, args.bucket);
+    const [zincPool] = zincPoolPda(this.c.programId, args.bucket);
+    const [miningAuthority] = findMiningAuthority(this.c.programId, args.bucket);
+    const custodyAta = zincCustodyAta(miningAuthority);
+    const ix = await this.c.program.methods
+      .initZincPool(
+        args.bucket as number,
+        new anchor.BN(args.minRoundLamports.toString()),
+        new anchor.BN(args.maxInflightLamports.toString()),
+      )
+      .accountsPartial({
+        config: this.c.configPda,
+        admin: args.admin.publicKey,
+        bucket: bucketPda,
+        zincPool,
+        miningAuthority,
+        zincMint: ZINC_MINT,
+        zincCustodyAta: custodyAta,
+        instructions: SYSVAR_INSTRUCTIONS_PUBKEY,
+        tokenProgram: ZINC_TOKEN_PROGRAM,
+        associatedTokenProgram: ZINC_ATA_PROGRAM,
+        systemProgram: SystemProgram.programId,
+      })
+      .instruction();
+    return this.cosign(ix, args.feeCosigner, args.admin);
+  }
+
+  /**
+   * Cosigned: tune the dZINC pool's per-round + per-window SOL caps. Mirrors
+   * `set_adapter_caps`. A 0 `minRoundLamports` falls back to the pool default.
+   *
+   * Wires ZincPoolAdmin: config, admin, bucket, zinc_pool, instructions.
+   */
+  async setZincPoolCaps(args: {
+    bucket: Bucket;
+    minRoundLamports: anchor.BN | number;
+    maxInflightLamports: anchor.BN | number;
+    admin: Signer;
+    feeCosigner: FeeCosigner;
+  }): Promise<string> {
+    const [bucketPda] = findBucket(this.c.programId, args.bucket);
+    const [zincPool] = zincPoolPda(this.c.programId, args.bucket);
+    const ix = await this.c.program.methods
+      .setZincPoolCaps(
+        new anchor.BN(args.minRoundLamports.toString()),
+        new anchor.BN(args.maxInflightLamports.toString()),
+      )
+      .accountsPartial({
+        config: this.c.configPda,
+        admin: args.admin.publicKey,
+        bucket: bucketPda,
+        zincPool,
+        instructions: SYSVAR_INSTRUCTIONS_PUBKEY,
+      })
+      .instruction();
+    return this.cosign(ix, args.feeCosigner, args.admin);
+  }
+
+  /**
+   * Cosigned: flip the dZINC pool drawdown halt (refuses the ZINC crank).
+   *
+   * Wires ZincPoolAdmin: config, admin, bucket, zinc_pool, instructions.
+   */
+  async setZincPoolDdHalt(args: {
+    bucket: Bucket;
+    ddHalt: boolean;
+    admin: Signer;
+    feeCosigner: FeeCosigner;
+  }): Promise<string> {
+    const [bucketPda] = findBucket(this.c.programId, args.bucket);
+    const [zincPool] = zincPoolPda(this.c.programId, args.bucket);
+    const ix = await this.c.program.methods
+      .setZincPoolDdHalt(args.ddHalt)
+      .accountsPartial({
+        config: this.c.configPda,
+        admin: args.admin.publicKey,
+        bucket: bucketPda,
+        zincPool,
+        instructions: SYSVAR_INSTRUCTIONS_PUBKEY,
+      })
+      .instruction();
+    return this.cosign(ix, args.feeCosigner, args.admin);
+  }
+
+  /**
+   * Cosigned: flip the dZINC pool pause (INDEPENDENT of the bucket-level
+   * pause; kills the ZINC crank without touching the dORE pool).
+   *
+   * Wires ZincPoolAdmin: config, admin, bucket, zinc_pool, instructions.
+   */
+  async setZincPoolPause(args: {
+    bucket: Bucket;
+    paused: boolean;
+    admin: Signer;
+    feeCosigner: FeeCosigner;
+  }): Promise<string> {
+    const [bucketPda] = findBucket(this.c.programId, args.bucket);
+    const [zincPool] = zincPoolPda(this.c.programId, args.bucket);
+    const ix = await this.c.program.methods
+      .setZincPoolPause(args.paused)
+      .accountsPartial({
+        config: this.c.configPda,
+        admin: args.admin.publicKey,
+        bucket: bucketPda,
+        zincPool,
+        instructions: SYSVAR_INSTRUCTIONS_PUBKEY,
+      })
+      .instruction();
+    return this.cosign(ix, args.feeCosigner, args.admin);
   }
 }

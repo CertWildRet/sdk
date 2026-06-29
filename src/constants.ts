@@ -14,6 +14,10 @@ export enum Bucket {
   Liquid = 0,
   Staked = 1,
   Locked = 2,
+  // Diamond Pools product aliases. Bucket 0 = dORE (ORE exposure),
+  // bucket 1 = dZINC (ZINC exposure). Same numeric values as Simple/Refined.
+  DOre = 0,
+  Zinc = 1,
 }
 
 export const BUCKET_LABELS: Record<number, string> = {
@@ -105,6 +109,66 @@ export const ORE_LST_SEED_VAULT = Buffer.from("vault");
 export const ORE_STAKE_SEED_STAKE = Buffer.from("stake");
 export const ORE_STAKE_SEED_TREASURY = Buffer.from("treasury");
 export const ORE_STAKE_SEED_VESTING = Buffer.from("vesting");
+
+// ─── dZINC pool (bucket 1) ──────────────────────────────────────────────
+// cwr-program seeds for the dZINC sidecar PDAs (under `programId`).
+/** Per-bucket dZINC pool sidecar PDA: PDA([ZINC_POOL_SEED, bucket_id]). */
+export const ZINC_POOL_SEED = Buffer.from("zinc_pool");
+/** Per-user dZINC position PDA: PDA([ZINC_POSITION_SEED, bucket_id, owner]). */
+export const ZINC_POSITION_SEED = Buffer.from("zinc_position");
+
+// ─── ZINC (zinc.cash) external program ids + pinned accounts ─────────────
+// VERIFIED on-chain - must match programs/cwr-vault/src/zinc_cpi.rs EXACTLY
+// (pinned from the ZINC handover, live 2026-06-25). A wrong id is a runtime
+// CPI failure on mainnet. ZINC is NOT Anchor (Codama-generated, no on-chain
+// IDL); like ORE we derive its PDAs by hand from the decoded seeds.
+
+/** The ZINC program id (board mining model; CPI target + affiliate=None sentinel). */
+export const ZINC_PROGRAM_ID = new PublicKey(
+  "zincUFpnqYwdYMc1KfH6rKcBvbcdVtHKckKhvrHLDsV",
+);
+/** The ZINC token mint (classic SPL Token, 9 decimals). */
+export const ZINC_MINT = new PublicKey(
+  "zinc155BS4mSPk8GXQj4R5hkVDQXcW253pTYq5SGyfi",
+);
+/** ZINC global config PDA (pinned). */
+export const ZINC_CONFIG = new PublicKey(
+  "48W7ZVgfdqmpVfTxdoRKuVg7gqGk5GHF3QpmxhHCUieG",
+);
+/** ZINC board PDA (active_round_id / next_round_id). */
+export const ZINC_BOARD = new PublicKey(
+  "DnryjThdeJbK4qfrVooTPRgWcjgAnQ5cVm2pF5mbeCeF",
+);
+/** ZINC treasury PDA (supply state; also the Unstake out-transfer authority). */
+export const ZINC_TREASURY = new PublicKey(
+  "4Ucw8BNkLWBu6gxkQsw3BRG2qRtw5WrG1UxiKpQjScH5",
+);
+/** Classic SPL Token program (the ZINC mint is a classic Token mint, NOT
+ *  Token-2022). Used for the ZINC custody / user ATAs. */
+export const ZINC_TOKEN_PROGRAM = new PublicKey(
+  "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+);
+/** The Associated Token Account program ZINC ATAs are derived under. */
+export const ZINC_ATA_PROGRAM = new PublicKey(
+  "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL",
+);
+
+/** ZINC PDA seeds (all under ZINC_PROGRAM_ID), verbatim from zinc_cpi.rs. */
+export const ZINC_SEED_ROUND = Buffer.from("round");
+export const ZINC_SEED_MINER = Buffer.from("miner");
+export const ZINC_SEED_PLAYER_PROFILE = Buffer.from("player-profile");
+export const ZINC_SEED_STOCKPILE_SOL_VAULT = Buffer.from("stockpile-sol-vault");
+export const ZINC_SEED_BONANZA_SOL_VAULT = Buffer.from("bonanza-sol-vault");
+export const ZINC_SEED_BUYBACK_SOL_VAULT = Buffer.from("buyback-sol-vault");
+/** Two-part seed for the round-zinc-reward token account:
+ *  PDA([b"treasury", b"round-zinc-reward-token-account"], ZINC_PROGRAM_ID). */
+export const ZINC_SEED_TREASURY = Buffer.from("treasury");
+export const ZINC_SEED_ROUND_REWARD_TA = Buffer.from(
+  "round-zinc-reward-token-account",
+);
+
+/** config.min_deploy_lamports (live 0.05 SOL) - per-ROUND floor, NOT per-tile. */
+export const ZINC_MIN_DEPLOY_LAMPORTS = new BN(50_000_000);
 
 export const NAV_SCALE = new BN("1000000000000000000");
 export const BPS_DENOMINATOR = new BN(10_000);

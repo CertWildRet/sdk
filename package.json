@@ -1,6 +1,6 @@
 {
   "name": "@cwr/sdk",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "description": "TypeScript SDK for Diamond Pools, the multi-pool vault on Solana (dORE = exposure to ORE, dZINC = exposure to ZINC). Wraps @cwr/abi with typed methods, PDA derivation, event subscriptions, and off-chain math previews.",
   "license": "MIT",
   "main": "dist/index.js",
@@ -20,7 +20,7 @@
   },
   "dependencies": {
     "@coral-xyz/anchor": "^0.31.1",
-    "@cwr/abi": "github:CertWildRet/abi#420cba8bc436ea0d6139894d1ff964fac720c3cc",
+    "@cwr/abi": "github:CertWildRet/abi#e4fb4ce1c78e6188f9bc1198646b9ccd12df2b46",
     "@solana/spl-token": "^0.4.14",
     "@solana/web3.js": "^1.95.0",
     "bn.js": "^5.2.3"
