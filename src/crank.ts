@@ -157,6 +157,10 @@ export class CrankApi {
     const addrs = deriveBucketAddresses(this.c.programId, args.bucket);
     const [miningAuthority] = findMiningAuthority(this.c.programId, args.bucket);
     const [oreMiner] = oreMinerPda(miningAuthority);
+    // ORE v3.8.13 checkpoint requires the authority + automation accounts.
+    // authority == miningAuthority (passed below); automation is the ORE
+    // autominer PDA for it.
+    const [oreAutomation] = oreAutomationPda(miningAuthority);
     const [oreBoard] = oreBoardPda();
     const [oreRound] = oreRoundPda(args.roundId);
     const [oreTreasury] = oreTreasuryPda();
@@ -166,6 +170,7 @@ export class CrankApi {
       .accountsPartial({
         bucket: addrs.bucket,
         miningAuthority,
+        oreAutomation,
         oreMiner,
         oreBoard,
         oreRound,
