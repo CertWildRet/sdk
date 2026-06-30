@@ -353,6 +353,15 @@ export function zincMinerPda(
   );
 }
 
+/** ZINC round-bonus PDA for a round: PDA([b"round-bonus", round_id]). Required
+ *  by close_miner (readonly account 4). */
+export function zincRoundBonusPda(roundId: BN): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from("round-bonus"), roundId.toArrayLike(Buffer, "le", 8)],
+    ZINC_PROGRAM_ID,
+  );
+}
+
 /** ZINC player-profile PDA for a player: PDA([b"player-profile", player]). */
 export function zincPlayerProfilePda(player: PublicKey): [PublicKey, number] {
   return PublicKey.findProgramAddressSync(

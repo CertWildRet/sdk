@@ -61,6 +61,8 @@ import {
   zincMinerPda,
   zincPlayerProfilePda,
   zincPoolPda,
+  zincPositionPda,
+  zincRoundBonusPda,
   zincRoundPda,
   zincRoundRewardTokenAccountPda,
   zincStockpileSolVaultPda,
@@ -558,6 +560,151 @@ export class CrankApi {
         position,
         pendingDeposit,
         oreMiner,
+        feeBucket,
+        feeSchedule,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+      })
+      .preInstructions(pre)
+      .signers([args.finalizer])
+      .rpc();
+  }
+
+  /**
+   * close_zinc_miner: reclaim a settled per-round ZINC miner's rent back to the
+   * bucket's mining_authority (the rent-recycle leg). Operator-signed; the keeper
+   * runs it after settle_harvest_zinc for each deployed round once that round is
+   * terminal. Reverts (caller retries) if not yet closeable / already closed.
+   */
+  async closeZincMiner(args: {
+    bucket: Bucket;
+    roundId: BN;
+    operator: Signer;
+  }): Promise<string> {
+    const addrs = deriveBucketAddresses(this.c.programId, args.bucket);
+    const [miningAuthority] = findMiningAuthority(this.c.programId, args.bucket);
+    const [zincRound] = zincRoundPda(args.roundId);
+    const [zincMiner] = zincMinerPda(args.roundId, miningAuthority);
+    const [zincRoundBonus] = zincRoundBonusPda(args.roundId);
+    return this.c.program.methods
+      .closeZincMiner(args.roundId)
+      .accountsPartial({
+        operator: args.operator.publicKey,
+        bucket: addrs.bucket,
+        miningAuthority,
+        zincProgram: ZINC_PROGRAM_ID,
+        zincConfig: ZINC_CONFIG,
+        zincRound,
+        zincMiner,
+        zincRoundBonus,
+      })
+      .signers([args.operator])
+      .rpc();
+  }
+
+  /**
+   * fund_mining_authority: top up a bucket's mining_authority rent buffer with
+   * external SOL. Permissionless funder. This SOL is rent working capital, NOT
+   * counted in sol_in_vault (not TVL, never depositor-withdrawable).
+   */
+  async fundMiningAuthority(args: {
+    bucket: Bucket;
+    amount: BN;
+    funder: Signer;
+  }): Promise<string> {
+    const addrs = deriveBucketAddresses(this.c.programId, args.bucket);
+    const [miningAuthority] = findMiningAuthority(this.c.programId, args.bucket);
+    return this.c.program.methods
+      .fundMiningAuthority(args.amount)
+      .accountsPartial({
+        funder: args.funder.publicKey,
+        bucket: addrs.bucket,
+        miningAuthority,
+        systemProgram: SystemProgram.programId,
+      })
+      .signers([args.funder])
+      .rpc();
+  }
+
+  /**
+   * park_deposit_zinc: escrow SOL into the dZINC pending buffer with NO shares
+   * (the dZINC twin of park_deposit). User-signed; usable during BETTING or
+   * OPEN-but-unsettled. Requires init_pending(bucket) to have set up the buffer.
+   */
+  async parkDepositZinc(args: {
+    bucket: Bucket;
+    amount: BN;
+    user: Signer;
+  }): Promise<string> {
+    const addrs = deriveBucketAddresses(this.c.programId, args.bucket);
+    const [zincPool] = zincPoolPda(this.c.programId, args.bucket);
+    const [pendingState] = findPendingState(this.c.programId, args.bucket);
+    const [pendingTreasury] = findPendingTreasury(this.c.programId, args.bucket);
+    const [pendingDeposit] = findPendingDeposit(
+      this.c.programId,
+      args.bucket,
+      args.user.publicKey,
+    );
+    return this.c.program.methods
+      .parkDepositZinc(args.amount)
+      .accountsPartial({
+        config: this.c.configPda,
+        bucket: addrs.bucket,
+        zincPool,
+        pendingState,
+        pendingTreasury,
+        user: args.user.publicKey,
+        pendingDeposit,
+        systemProgram: SystemProgram.programId,
+      })
+      .signers([args.user])
+      .rpc();
+  }
+
+  /**
+   * finalize_pending_zinc: convert a parked dZINC ticket into dZINC shares
+   * (the dZINC twin of finalizePending). Permissionless finalizer (the keeper),
+   * gated phase==OPEN && window_settled.
+   */
+  async finalizePendingZinc(args: {
+    bucket: Bucket;
+    owner: PublicKey;
+    finalizer: Signer;
+  }): Promise<string> {
+    const addrs = deriveBucketAddresses(this.c.programId, args.bucket);
+    const [zincPool] = zincPoolPda(this.c.programId, args.bucket);
+    const [pendingState] = findPendingState(this.c.programId, args.bucket);
+    const [pendingTreasury] = findPendingTreasury(this.c.programId, args.bucket);
+    const [pendingDeposit] = findPendingDeposit(this.c.programId, args.bucket, args.owner);
+    const [zincPosition] = zincPositionPda(this.c.programId, args.bucket, args.owner);
+    const [feeBucket] = findFeeBucket(this.c.programId);
+    const [feeSchedule] = findFeeSchedule(this.c.programId);
+    const ownerShareAta = getAssociatedTokenAddressSync(addrs.shareMint, args.owner);
+
+    const pre = [
+      createAssociatedTokenAccountIdempotentInstruction(
+        args.finalizer.publicKey, // payer
+        ownerShareAta,
+        args.owner, // ata owner
+        addrs.shareMint,
+      ),
+    ];
+
+    return this.c.program.methods
+      .finalizePendingZinc()
+      .accountsPartial({
+        config: this.c.configPda,
+        bucket: addrs.bucket,
+        zincPool,
+        treasury: addrs.treasury,
+        pendingState,
+        pendingTreasury,
+        shareMint: addrs.shareMint,
+        ownerShareAta,
+        owner: args.owner,
+        finalizer: args.finalizer.publicKey,
+        zincPosition,
+        pendingDeposit,
         feeBucket,
         feeSchedule,
         tokenProgram: TOKEN_PROGRAM_ID,
