@@ -29,7 +29,10 @@ export type CwrEventName =
   | "CheckpointEvent"
   | "SettleUoreEvent"
   | "BatchReplenishEvent"
-  | "PhaseChangedEvent";
+  | "PhaseChangedEvent"
+  // Admin-cosigned pool recapitalize / resolve
+  | "ReseedPoolEvent"
+  | "ResolvePoolEvent";
 
 export type EventHandler<T = any> = (event: T, slot: number, signature: string) => void;
 
@@ -39,9 +42,14 @@ export class EventsApi {
   constructor(private readonly c: CwrVaultClient) {}
 
   on<T = any>(name: CwrEventName, handler: EventHandler<T>): Unsubscribe {
-    const id = this.c.program.addEventListener(name as any, handler as any);
+    // Cast the program to `any` for this call: Anchor types addEventListener over
+    // IdlEvents<CwrVault>, a deep mapped type that now exceeds TS's instantiation
+    // depth (TS2589) as the IDL has grown. The event name is already validated by
+    // the CwrEventName union above, so no type safety is lost here.
+    const program = this.c.program as any;
+    const id = program.addEventListener(name as any, handler as any);
     return async () => {
-      await this.c.program.removeEventListener(id);
+      await program.removeEventListener(id);
     };
   }
 

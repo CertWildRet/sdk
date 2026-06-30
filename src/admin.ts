@@ -25,6 +25,7 @@ import {
   findPendingTreasury,
   findReferralConfig,
   findReferralTreasury,
+  findTreasury,
   zincCustodyAta,
   zincPoolPda,
 } from "./pdas";
@@ -38,11 +39,12 @@ import type { BucketParamsInput, FeeRecipientInput } from "./types";
 export class AdminApi {
   constructor(private readonly c: CwrVaultClient) {}
 
-  /** Build the cosign + send [ed25519, adminIx] signed by admin. */
+  /** Build the cosign + send [ed25519, adminIx] signed by admin (+ any extra). */
   private async cosign(
     adminIx: TransactionInstruction,
     feeCosigner: FeeCosigner,
     admin: Signer,
+    extraSigners?: Signer[],
   ): Promise<string> {
     return sendCosignedAdminIx({
       provider: this.c.program.provider as anchor.AnchorProvider,
@@ -54,6 +56,7 @@ export class AdminApi {
       adminIx,
       feeCosigner,
       admin,
+      extraSigners,
     });
   }
 
@@ -799,6 +802,80 @@ export class AdminApi {
         admin: args.admin.publicKey,
         bucket: bucketPda,
         zincPool,
+        instructions: SYSVAR_INSTRUCTIONS_PUBKEY,
+      })
+      .instruction();
+    return this.cosign(ix, args.feeCosigner, args.admin);
+  }
+
+  /**
+   * Admin+cosign: inject external SOL into a pool's treasury, raising
+   * `sol_in_vault` 1:1 with NO mint and NO `total_shares` change (the no-mint
+   * recapitalize that makes a drained/shortfalling pool's holders whole at their
+   * original price). BETTING-only and NPS-bounded on-chain. `funder` defaults to
+   * the admin; if distinct it is added to the tx signer set.
+   *
+   * Wires ReseedPool: config, admin, bucket, zinc_pool, treasury, funder,
+   * system_program, instructions.
+   */
+  async reseedPool(args: {
+    bucket: Bucket;
+    amount: anchor.BN | number;
+    admin: Signer;
+    feeCosigner: FeeCosigner;
+    funder?: Signer;
+  }): Promise<string> {
+    const [bucketPda] = findBucket(this.c.programId, args.bucket);
+    const [zincPool] = zincPoolPda(this.c.programId, args.bucket);
+    const [treasury] = findTreasury(this.c.programId, args.bucket);
+    const funder = args.funder ?? args.admin;
+    const ix = await this.c.program.methods
+      .reseedPool(new anchor.BN(args.amount.toString()))
+      .accountsPartial({
+        config: this.c.configPda,
+        admin: args.admin.publicKey,
+        bucket: bucketPda,
+        zincPool,
+        treasury,
+        funder: funder.publicKey,
+        systemProgram: SystemProgram.programId,
+        instructions: SYSVAR_INSTRUCTIONS_PUBKEY,
+      })
+      .instruction();
+    return this.cosign(ix, args.feeCosigner, args.admin, [funder]);
+  }
+
+  /**
+   * Admin+cosign: reconcile a pool's `sol_in_vault` DOWN to the treasury PDA's
+   * real balance (realize a shortfall). Moves NO SOL, mints/burns nothing, never
+   * changes `total_shares` (no orphaned tokens); NPS falls uniformly and holders
+   * exit at the corrected price via the normal withdraw path. Requires the bucket
+   * be paused first (separate `setPause`) and runs in BETTING. A move beyond the
+   * per-call drop bound requires `acknowledgeFullWriteDown = true`.
+   *
+   * Wires ResolvePool: config, admin, bucket, zinc_pool, treasury, instructions.
+   */
+  async resolvePool(args: {
+    bucket: Bucket;
+    targetSolInVault: anchor.BN | number;
+    acknowledgeFullWriteDown: boolean;
+    admin: Signer;
+    feeCosigner: FeeCosigner;
+  }): Promise<string> {
+    const [bucketPda] = findBucket(this.c.programId, args.bucket);
+    const [zincPool] = zincPoolPda(this.c.programId, args.bucket);
+    const [treasury] = findTreasury(this.c.programId, args.bucket);
+    const ix = await this.c.program.methods
+      .resolvePool(
+        new anchor.BN(args.targetSolInVault.toString()),
+        args.acknowledgeFullWriteDown,
+      )
+      .accountsPartial({
+        config: this.c.configPda,
+        admin: args.admin.publicKey,
+        bucket: bucketPda,
+        zincPool,
+        treasury,
         instructions: SYSVAR_INSTRUCTIONS_PUBKEY,
       })
       .instruction();

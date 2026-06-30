@@ -107,6 +107,8 @@ export async function sendCosignedAdminIx(args: {
   adminIx: TransactionInstruction;
   feeCosigner: FeeCosigner;
   admin: Signer;
+  /** Extra signers beyond admin (e.g. a distinct reseed funder). */
+  extraSigners?: Signer[];
 }): Promise<string> {
   const nonce = await args.fetchNonce();
   const signedTs = BigInt(Math.floor(Date.now() / 1000));
@@ -124,5 +126,10 @@ export async function sendCosignedAdminIx(args: {
     signature,
   });
   const tx = new Transaction().add(edIx, args.adminIx);
-  return args.provider.sendAndConfirm(tx, [args.admin], { commitment: "confirmed" });
+  const extra = (args.extraSigners ?? []).filter(
+    (s) => !s.publicKey.equals(args.admin.publicKey),
+  );
+  return args.provider.sendAndConfirm(tx, [args.admin, ...extra], {
+    commitment: "confirmed",
+  });
 }
