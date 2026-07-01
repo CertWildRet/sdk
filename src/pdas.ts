@@ -42,6 +42,13 @@ import {
   ZINC_SEED_ROUND,
   ZINC_SEED_ROUND_REWARD_TA,
   ZINC_SEED_STOCKPILE_SOL_VAULT,
+  ZINC_SEED_STAKE_POSITION,
+  ZINC_SEED_STAKING_TA,
+  ZINC_SEED_STAKING_REWARD_TA,
+  ZINC_SEED_STOCKPILE,
+  ZINC_SEED_STOCKPILE_WINNERS,
+  ZINC_SEED_STOCKPILE_EXTRAS,
+  ZINC_SEED_STOCKPILE_TA,
   ZINC_SEED_TREASURY,
   ZINC_TOKEN_PROGRAM,
 } from "./constants";
@@ -428,5 +435,68 @@ export function zincUserAta(owner: PublicKey): PublicKey {
     false,
     ZINC_TOKEN_PROGRAM,
     ZINC_ATA_PROGRAM,
+  );
+}
+
+// ─── ZINC staking + Stockpile PDAs (v1.2.0; mirror zinc_cpi.rs) ──────────
+
+/** The pool's single StakePosition PDA (mining_authority IS the staker):
+ *  PDA([b"stake-position", authority]). */
+export function zincStakePositionPda(authority: PublicKey): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync(
+    [ZINC_SEED_STAKE_POSITION, authority.toBuffer()],
+    ZINC_PROGRAM_ID,
+  );
+}
+
+/** ZINC pooled staking token account (restake dest / unstake source):
+ *  PDA([b"treasury", b"staking-token-account"]). */
+export function zincStakingTokenAccountPda(): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync(
+    [ZINC_SEED_TREASURY, ZINC_SEED_STAKING_TA],
+    ZINC_PROGRAM_ID,
+  );
+}
+
+/** ZINC staking-reward token account (yield source):
+ *  PDA([b"treasury", b"staking-reward-token-account"]). */
+export function zincStakingRewardTokenAccountPda(): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync(
+    [ZINC_SEED_TREASURY, ZINC_SEED_STAKING_REWARD_TA],
+    ZINC_PROGRAM_ID,
+  );
+}
+
+/** The Stockpile PDA for a cycle id: PDA([b"stockpile", stockpile_id]). */
+export function zincStockpilePda(stockpileId: BN): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync(
+    [ZINC_SEED_STOCKPILE, stockpileId.toArrayLike(Buffer, "le", 8)],
+    ZINC_PROGRAM_ID,
+  );
+}
+
+/** The StockpileWinners PDA for a cycle id:
+ *  PDA([b"stockpile-winners", stockpile_id]). */
+export function zincStockpileWinnersPda(stockpileId: BN): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync(
+    [ZINC_SEED_STOCKPILE_WINNERS, stockpileId.toArrayLike(Buffer, "le", 8)],
+    ZINC_PROGRAM_ID,
+  );
+}
+
+/** The stockpile-extras PDA (singleton): PDA([b"stockpile-extras"]). */
+export function zincStockpileExtrasPda(): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync(
+    [ZINC_SEED_STOCKPILE_EXTRAS],
+    ZINC_PROGRAM_ID,
+  );
+}
+
+/** ZINC stockpile token account (entry-fee dest):
+ *  PDA([b"treasury", b"stockpile-token-account"]). */
+export function zincStockpileTokenAccountPda(): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync(
+    [ZINC_SEED_TREASURY, ZINC_SEED_STOCKPILE_TA],
+    ZINC_PROGRAM_ID,
   );
 }

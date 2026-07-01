@@ -32,7 +32,13 @@ export type CwrEventName =
   | "PhaseChangedEvent"
   // Admin-cosigned pool recapitalize / resolve
   | "ReseedPoolEvent"
-  | "ResolvePoolEvent";
+  | "ResolvePoolEvent"
+  // v1.2.0 dZINC staking + Stockpile
+  | "ClaimZincYieldEvent"
+  | "JoinZincStockpileEvent"
+  | "PayoutZincStockpileEvent"
+  | "ZincPoolStockpileCfgEvent"
+  | "ZincPoolMigratedEvent";
 
 export type EventHandler<T = any> = (event: T, slot: number, signature: string) => void;
 
@@ -89,5 +95,22 @@ export class EventsApi {
 
   onFeesDistributed(handler: EventHandler) {
     return this.on("FeesDistributedEvent", handler);
+  }
+
+  // v1.2.0 dZINC staking + Stockpile helpers
+  onClaimZincYield(handler: EventHandler) {
+    return this.on("ClaimZincYieldEvent", handler);
+  }
+
+  onJoinZincStockpile(handler: EventHandler) {
+    return this.on("JoinZincStockpileEvent", handler);
+  }
+
+  onPayoutZincStockpile(handler: EventHandler) {
+    return this.on("PayoutZincStockpileEvent", handler);
+  }
+
+  onZincPoolMigrated(handler: EventHandler) {
+    return this.on("ZincPoolMigratedEvent", handler);
   }
 }

@@ -167,6 +167,20 @@ export const ZINC_SEED_ROUND_REWARD_TA = Buffer.from(
   "round-zinc-reward-token-account",
 );
 
+/** ZINC staking + stockpile PDA seeds (v1.2.0), verbatim from zinc_cpi.rs. */
+export const ZINC_SEED_STAKE_POSITION = Buffer.from("stake-position");
+/** Second half of PDA([b"treasury", b"staking-token-account"]). */
+export const ZINC_SEED_STAKING_TA = Buffer.from("staking-token-account");
+/** Second half of PDA([b"treasury", b"staking-reward-token-account"]). */
+export const ZINC_SEED_STAKING_REWARD_TA = Buffer.from(
+  "staking-reward-token-account",
+);
+export const ZINC_SEED_STOCKPILE = Buffer.from("stockpile");
+export const ZINC_SEED_STOCKPILE_WINNERS = Buffer.from("stockpile-winners");
+export const ZINC_SEED_STOCKPILE_EXTRAS = Buffer.from("stockpile-extras");
+/** Second half of PDA([b"treasury", b"stockpile-token-account"]). */
+export const ZINC_SEED_STOCKPILE_TA = Buffer.from("stockpile-token-account");
+
 /** config.min_deploy_lamports (live 0.05 SOL) - per-ROUND floor, NOT per-tile. */
 export const ZINC_MIN_DEPLOY_LAMPORTS = new BN(50_000_000);
 

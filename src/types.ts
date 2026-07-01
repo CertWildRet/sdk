@@ -8,6 +8,15 @@ export type BucketState = IdlAccounts<CwrVault>["bucket"];
 export type FeeScheduleState = IdlAccounts<CwrVault>["feeSchedule"];
 
 /**
+ * The per-bucket dZINC pool sidecar. IDL-derived, so v1.2.0's appended staking
+ * + Stockpile fields (stakePosition, lastSeenStakeBalance, totalYieldCompounded,
+ * maxStakedGrams, minCustodyFloat, stockpileEnabled, lastJoinedStockpileId,
+ * stockpileEntryZincBudget, stockpileMinJoinBricksX10k, stockpileSkimBps,
+ * stockpileWarChestGrams, stockpileSolWon, stockpileZincWon) are included.
+ */
+export type ZincPoolState = IdlAccounts<CwrVault>["zincPool"];
+
+/**
  * Input shape for `initBucket` / `setBucketParams`.
  *
  * Mirrors `programs/cwr-vault/src/state.rs` `BucketParams`. V5 added the

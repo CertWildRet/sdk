@@ -881,4 +881,85 @@ export class AdminApi {
       .instruction();
     return this.cosign(ix, args.feeCosigner, args.admin);
   }
+
+  // ════════════════════════════════════════════════════════════════════
+  // dZINC staking + Stockpile (v1.2.0). Cosigned admin, mirroring
+  // setZincPoolCaps / reseedPool (the same fee-holder Ed25519 second factor).
+  // ════════════════════════════════════════════════════════════════════
+
+  /**
+   * Cosigned: configure the dZINC pool's staking + Stockpile war-chest (v1.2.0).
+   * Flips the Stockpile master switch, sets the per-settle war-chest skim (bps,
+   * capped at MAX_ZINC_STOCKPILE_SKIM_BPS on-chain), the war-chest ZINC budget,
+   * the min-join Bricks floor, the max-staked-grams circuit breaker, and the
+   * fast-exit custody float. Default rollout is OFF; flip on once staking is
+   * proven live.
+   *
+   * Wires ZincPoolAdmin: config, admin, bucket, zinc_pool, instructions.
+   */
+  async setZincPoolStockpileCfg(args: {
+    bucket: Bucket;
+    enabled: boolean;
+    skimBps: number;
+    entryZincBudget: anchor.BN | number;
+    minJoinBricksX10k: anchor.BN | number;
+    maxStakedGrams: anchor.BN | number;
+    minCustodyFloat: anchor.BN | number;
+    admin: Signer;
+    feeCosigner: FeeCosigner;
+  }): Promise<string> {
+    const [bucketPda] = findBucket(this.c.programId, args.bucket);
+    const [zincPool] = zincPoolPda(this.c.programId, args.bucket);
+    const ix = await this.c.program.methods
+      .setZincPoolStockpileCfg(
+        args.enabled,
+        args.skimBps,
+        new anchor.BN(args.entryZincBudget.toString()),
+        new anchor.BN(args.minJoinBricksX10k.toString()),
+        new anchor.BN(args.maxStakedGrams.toString()),
+        new anchor.BN(args.minCustodyFloat.toString()),
+      )
+      .accountsPartial({
+        config: this.c.configPda,
+        admin: args.admin.publicKey,
+        bucket: bucketPda,
+        zincPool,
+        instructions: SYSVAR_INSTRUCTIONS_PUBKEY,
+      })
+      .instruction();
+    return this.cosign(ix, args.feeCosigner, args.admin);
+  }
+
+  /**
+   * Cosigned: one-time in-place migration of a LIVE (pre-v1.2.0) ZincPool to fit
+   * the appended staking + Stockpile fields. Brick-safe: on-chain the account is
+   * taken RAW and grown via a MANUAL realloc before any deserialize (the rent
+   * delta is funded from admin), then the new fields are seeded to defaults. A
+   * fresh pool is born correct via `initZincPool`; this is only for bucket 1.
+   * Idempotent one-shot (guarded on account size). The account grows 157 -> 272
+   * bytes.
+   *
+   * Wires MigrateZincPoolStaking: config, admin, bucket, zinc_pool,
+   * instructions, system_program.
+   */
+  async migrateZincPoolStaking(args: {
+    bucket: Bucket;
+    admin: Signer;
+    feeCosigner: FeeCosigner;
+  }): Promise<string> {
+    const [bucketPda] = findBucket(this.c.programId, args.bucket);
+    const [zincPool] = zincPoolPda(this.c.programId, args.bucket);
+    const ix = await this.c.program.methods
+      .migrateZincPoolStaking()
+      .accountsPartial({
+        config: this.c.configPda,
+        admin: args.admin.publicKey,
+        bucket: bucketPda,
+        zincPool,
+        instructions: SYSVAR_INSTRUCTIONS_PUBKEY,
+        systemProgram: SystemProgram.programId,
+      })
+      .instruction();
+    return this.cosign(ix, args.feeCosigner, args.admin);
+  }
 }

@@ -26,7 +26,12 @@ import {
   payoutForShares,
   sharesForDeposit,
 } from "./math";
-import type { BucketState, ConfigState, FeeScheduleState } from "./types";
+import type {
+  BucketState,
+  ConfigState,
+  FeeScheduleState,
+  ZincPoolState,
+} from "./types";
 
 export type NavSnapshot = {
   solInVault: BN;
@@ -204,9 +209,9 @@ export class ReadApi {
    * dZINC pool. Holds the smelted-ZINC-per-share accumulator, custody mirror,
    * caps, and the cached zinc_profile / zinc_custody_ata pubkeys.
    */
-  async zincPool(bucket: Bucket): Promise<any | null> {
+  async zincPool(bucket: Bucket): Promise<ZincPoolState | null> {
     const [pda] = zincPoolPda(this.c.programId, bucket);
-    return this.c.program.account.zincPool.fetchNullable(pda);
+    return this.c.program.account.zincPool.fetchNullable(pda) as Promise<ZincPoolState | null>;
   }
 
   /**

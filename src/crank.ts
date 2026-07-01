@@ -65,7 +65,14 @@ import {
   zincRoundBonusPda,
   zincRoundPda,
   zincRoundRewardTokenAccountPda,
+  zincStakePositionPda,
+  zincStakingRewardTokenAccountPda,
+  zincStakingTokenAccountPda,
+  zincStockpileExtrasPda,
+  zincStockpilePda,
   zincStockpileSolVaultPda,
+  zincStockpileTokenAccountPda,
+  zincStockpileWinnersPda,
 } from "./pdas";
 
 const ALL_SQUARES: boolean[] = Array.from({ length: 25 }, () => true);
@@ -467,6 +474,173 @@ export class CrankApi {
       })
       // claim SOL + smelt CPI + accumulator advance + (first-settle) ATA create.
       .preInstructions([ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 })])
+      .signers([args.caller])
+      .rpc();
+  }
+
+  /**
+   * dZINC yield-compound crank (v1.2.0). PERMISSIONLESS - the keeper runs it
+   * during BETTING to claim the pool's accrued staking yield and RESTAKE it
+   * (auto-compound), growing `zinc_in_vault` at no holder cost. Soft-skips when
+   * there is nothing to claim, so a yield-less window never bricks the barrier.
+   * Mirrors `settleHarvestZinc` (permissionless; the caller pays tx + one-time
+   * custody-ATA rent).
+   *
+   * Wires CrankClaimZincYield: bucket, zinc_pool, mining_authority,
+   * zinc_custody_ata, zinc_mint, zinc_stake_position, zinc_config,
+   * zinc_player_profile, zinc_staking_reward_token_account,
+   * zinc_staking_token_account, zinc_treasury, zinc_program, caller,
+   * token_program, associated_token_program, system_program.
+   */
+  async crankClaimZincYield(args: {
+    bucket: Bucket;
+    caller: Signer;
+  }): Promise<string> {
+    const addrs = deriveBucketAddresses(this.c.programId, args.bucket);
+    const [zincPool] = zincPoolPda(this.c.programId, args.bucket);
+    const [miningAuthority] = findMiningAuthority(this.c.programId, args.bucket);
+    const custodyAta = zincCustodyAta(miningAuthority);
+    const [zincStakePosition] = zincStakePositionPda(miningAuthority);
+    const [zincPlayerProfile] = zincPlayerProfilePda(miningAuthority);
+    const [zincStakingRewardTa] = zincStakingRewardTokenAccountPda();
+    const [zincStakingTa] = zincStakingTokenAccountPda();
+
+    return this.c.program.methods
+      .crankClaimZincYield()
+      .accountsPartial({
+        bucket: addrs.bucket,
+        zincPool,
+        miningAuthority,
+        zincCustodyAta: custodyAta,
+        zincMint: ZINC_MINT,
+        zincStakePosition,
+        zincConfig: ZINC_CONFIG,
+        zincPlayerProfile,
+        zincStakingRewardTokenAccount: zincStakingRewardTa,
+        zincStakingTokenAccount: zincStakingTa,
+        zincTreasury: ZINC_TREASURY,
+        zincProgram: ZINC_PROGRAM_ID,
+        caller: args.caller.publicKey,
+        tokenProgram: ZINC_TOKEN_PROGRAM,
+        associatedTokenProgram: ZINC_ATA_PROGRAM,
+        systemProgram: SystemProgram.programId,
+      })
+      // claim-yield + restake CPI + (first-run) ATA create.
+      .preInstructions([ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 })])
+      .signers([args.caller])
+      .rpc();
+  }
+
+  /**
+   * dZINC Stockpile JOIN crank (v1.2.0). OPERATOR-gated (controls WHEN). Spends
+   * war-chest ZINC entry fees to join the ZINC Stockpile cycle `stockpileId`.
+   * The Stockpile master switch + war-chest budget are set via
+   * `setZincPoolStockpileCfg`. `stockpileId` must equal the board's active
+   * stockpile id (validated on-chain).
+   *
+   * Wires CrankJoinZincStockpile: operator, bucket, zinc_pool, mining_authority,
+   * zinc_custody_ata, zinc_mint, zinc_stake_position, zinc_staking_token_account,
+   * zinc_config, zinc_board, zinc_player_profile, zinc_treasury, zinc_stockpile,
+   * zinc_stockpile_token_account, zinc_staking_reward_token_account, zinc_program,
+   * token_program, associated_token_program, system_program.
+   */
+  async crankJoinZincStockpile(args: {
+    bucket: Bucket;
+    stockpileId: BN;
+    operator: Signer;
+  }): Promise<string> {
+    const addrs = deriveBucketAddresses(this.c.programId, args.bucket);
+    const [zincPool] = zincPoolPda(this.c.programId, args.bucket);
+    const [miningAuthority] = findMiningAuthority(this.c.programId, args.bucket);
+    const custodyAta = zincCustodyAta(miningAuthority);
+    const [zincStakePosition] = zincStakePositionPda(miningAuthority);
+    const [zincStakingTa] = zincStakingTokenAccountPda();
+    const [zincPlayerProfile] = zincPlayerProfilePda(miningAuthority);
+    const [zincStockpile] = zincStockpilePda(args.stockpileId);
+    const [zincStockpileTa] = zincStockpileTokenAccountPda();
+    const [zincStakingRewardTa] = zincStakingRewardTokenAccountPda();
+
+    return this.c.program.methods
+      .crankJoinZincStockpile(args.stockpileId)
+      .accountsPartial({
+        operator: args.operator.publicKey,
+        bucket: addrs.bucket,
+        zincPool,
+        miningAuthority,
+        zincCustodyAta: custodyAta,
+        zincMint: ZINC_MINT,
+        zincStakePosition,
+        zincStakingTokenAccount: zincStakingTa,
+        zincConfig: ZINC_CONFIG,
+        zincBoard: ZINC_BOARD,
+        zincPlayerProfile,
+        zincTreasury: ZINC_TREASURY,
+        zincStockpile,
+        zincStockpileTokenAccount: zincStockpileTa,
+        zincStakingRewardTokenAccount: zincStakingRewardTa,
+        zincProgram: ZINC_PROGRAM_ID,
+        tokenProgram: ZINC_TOKEN_PROGRAM,
+        associatedTokenProgram: ZINC_ATA_PROGRAM,
+        systemProgram: SystemProgram.programId,
+      })
+      .preInstructions([ComputeBudgetProgram.setComputeUnitLimit({ units: 600_000 })])
+      .signers([args.operator])
+      .rpc();
+  }
+
+  /**
+   * dZINC Stockpile PAYOUT crank (v1.2.0). PERMISSIONLESS. Collects the pool's
+   * won SOL + ZINC from a settled Stockpile cycle `stockpileId` (the won SOL is
+   * swept to `treasury` as working capital; won ZINC accrues to the player
+   * profile). Runs after the cycle resolves.
+   *
+   * Wires CrankPayoutZincStockpile: bucket, zinc_pool, treasury,
+   * mining_authority, zinc_mint, zinc_config, zinc_stockpile,
+   * zinc_stockpile_winners, zinc_stockpile_extras, zinc_board, zinc_treasury,
+   * zinc_stockpile_sol_vault, zinc_stockpile_token_account, zinc_player_profile,
+   * zinc_round_zinc_reward_token_account, zinc_program, caller, token_program,
+   * system_program.
+   */
+  async crankPayoutZincStockpile(args: {
+    bucket: Bucket;
+    stockpileId: BN;
+    caller: Signer;
+  }): Promise<string> {
+    const addrs = deriveBucketAddresses(this.c.programId, args.bucket);
+    const [zincPool] = zincPoolPda(this.c.programId, args.bucket);
+    const [miningAuthority] = findMiningAuthority(this.c.programId, args.bucket);
+    const [zincStockpile] = zincStockpilePda(args.stockpileId);
+    const [zincStockpileWinners] = zincStockpileWinnersPda(args.stockpileId);
+    const [zincStockpileExtras] = zincStockpileExtrasPda();
+    const [zincStockpileSolVault] = zincStockpileSolVaultPda();
+    const [zincStockpileTa] = zincStockpileTokenAccountPda();
+    const [zincPlayerProfile] = zincPlayerProfilePda(miningAuthority);
+    const [zincRoundRewardTa] = zincRoundRewardTokenAccountPda();
+
+    return this.c.program.methods
+      .crankPayoutZincStockpile(args.stockpileId)
+      .accountsPartial({
+        bucket: addrs.bucket,
+        zincPool,
+        treasury: addrs.treasury,
+        miningAuthority,
+        zincMint: ZINC_MINT,
+        zincConfig: ZINC_CONFIG,
+        zincStockpile,
+        zincStockpileWinners,
+        zincStockpileExtras,
+        zincBoard: ZINC_BOARD,
+        zincTreasury: ZINC_TREASURY,
+        zincStockpileSolVault,
+        zincStockpileTokenAccount: zincStockpileTa,
+        zincPlayerProfile,
+        zincRoundZincRewardTokenAccount: zincRoundRewardTa,
+        zincProgram: ZINC_PROGRAM_ID,
+        caller: args.caller.publicKey,
+        tokenProgram: ZINC_TOKEN_PROGRAM,
+        systemProgram: SystemProgram.programId,
+      })
+      .preInstructions([ComputeBudgetProgram.setComputeUnitLimit({ units: 600_000 })])
       .signers([args.caller])
       .rpc();
   }
