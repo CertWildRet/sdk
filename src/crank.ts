@@ -67,6 +67,7 @@ import {
   zincRoundRewardTokenAccountPda,
   zincStakePositionPda,
   zincStakingRewardTokenAccountPda,
+  zincStakingSolRewardVaultPda,
   zincStakingTokenAccountPda,
   zincStockpileExtrasPda,
   zincStockpilePda,
@@ -527,6 +528,48 @@ export class CrankApi {
       })
       // claim-yield + restake CPI + (first-run) ATA create.
       .preInstructions([ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 })])
+      .signers([args.caller])
+      .rpc();
+  }
+
+  /**
+   * dZINC stZINC SOL-yield crank (2026-07). PERMISSIONLESS. Captures the stZINC
+   * SOL-reward leg (separate from crank_claim_zinc_yield's ZINC/Bricks leg;
+   * independent checkpoint, no ordering needed) by claiming it onto the
+   * mining_authority PDA and sweeping the measured lamport delta into
+   * bucket.sol_in_vault. Soft-fail + pause-exempt on-chain; writes only the SOL
+   * leg. Run it every BETTING window alongside crankClaimZincYield.
+   *
+   * Wires CrankClaimZincSolYield: bucket, zinc_pool, mining_authority, treasury,
+   * zinc_stake_position, zinc_config, zinc_treasury, zinc_staking_sol_reward_vault,
+   * zinc_program, caller, system_program.
+   */
+  async crankClaimZincSolYield(args: {
+    bucket: Bucket;
+    caller: Signer;
+  }): Promise<string> {
+    const addrs = deriveBucketAddresses(this.c.programId, args.bucket);
+    const [zincPool] = zincPoolPda(this.c.programId, args.bucket);
+    const [miningAuthority] = findMiningAuthority(this.c.programId, args.bucket);
+    const [zincStakePosition] = zincStakePositionPda(miningAuthority);
+    const [zincStakingSolRewardVault] = zincStakingSolRewardVaultPda();
+
+    return this.c.program.methods
+      .crankClaimZincSolYield()
+      .accountsPartial({
+        bucket: addrs.bucket,
+        zincPool,
+        miningAuthority,
+        treasury: addrs.treasury,
+        zincStakePosition,
+        zincConfig: ZINC_CONFIG,
+        zincTreasury: ZINC_TREASURY,
+        zincStakingSolRewardVault,
+        zincProgram: ZINC_PROGRAM_ID,
+        caller: args.caller.publicKey,
+        systemProgram: SystemProgram.programId,
+      })
+      .preInstructions([ComputeBudgetProgram.setComputeUnitLimit({ units: 60_000 })])
       .signers([args.caller])
       .rpc();
   }

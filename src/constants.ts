@@ -35,6 +35,8 @@ export const FEE_SCHEDULE_SEED = Buffer.from("fee_schedule");
 export const FEE_BUCKET_SEED = Buffer.from("fee_bucket");
 // V5 stORE basket payout
 export const STORE_TREASURY_SEED = Buffer.from("store_treasury");
+// V2 stORE reserve (post 2026-06-15 ore-stake-hack migration; NEW mint).
+export const STORE_TREASURY_V2_SEED = Buffer.from("store_treasury_v2");
 
 // ─── V6 non-custodial mining ────────────────────────────────────────────
 /** Seed for the per-bucket mining authority PDA: PDA([MINING_SEED, bucket_id]). */
@@ -71,11 +73,11 @@ export const ORE_PROGRAM_ID = new PublicKey(
 );
 /** The ore-lst program (wraps ORE -> stORE). */
 export const ORE_LST_PROGRAM_ID = new PublicKey(
-  "LStwN2E5Uw6MCtuxHRLhy8RY9hxqW2XRpLzettb696y",
+  "storeD7bEkywTTMrje19WRoyrkEhbhrvyjVnLxWih6a",
 );
 /** The ore-stake program (holds the stake/treasury/vesting PDAs for ore-lst). */
 export const ORE_STAKE_PROGRAM_ID = new PublicKey(
-  "STkEAu2cEyQp5ktgUauRVq8es6mEP2w6ixw4NEd5tDJ",
+  "stakecNP3FpiExZPCgZfqRgumVzi6dNqnfrjwXyTgeH",
 );
 /** The Entropy program (touched by ORE Deploy on the first deploy of a round). */
 export const ENTROPY_PROGRAM_ID = new PublicKey(
@@ -92,7 +94,7 @@ export const ORE_MINT = new PublicKey(
 );
 /** The stORE token mint (SPL Token, 11 decimals). */
 export const STORE_MINT = new PublicKey(
-  "sTorERYB6xAZ1SSbwpK3zoK2EEwbBrc7TZAzg1uCGiH",
+  "storenSbvkfzircixnaosc5CbzNZVrHJ6S3EKrS1yqR",
 );
 
 /** ORE PDA seeds (all under ORE_PROGRAM_ID). */

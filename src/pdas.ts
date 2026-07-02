@@ -28,7 +28,7 @@ import {
   REFERRAL_TREASURY_SEED,
   REFERRER_SEED,
   SHARE_MINT_SEED,
-  STORE_TREASURY_SEED,
+  STORE_TREASURY_V2_SEED,
   TREASURY_SEED,
   ZINC_ATA_PROGRAM,
   ZINC_MINT,
@@ -107,7 +107,7 @@ export function findStoreTreasury(
   bucketId: number,
 ): [PublicKey, number] {
   return PublicKey.findProgramAddressSync(
-    [STORE_TREASURY_SEED, Buffer.from([bucketId])],
+    [STORE_TREASURY_V2_SEED, Buffer.from([bucketId])],
     programId,
   );
 }
@@ -397,6 +397,15 @@ export function zincBonanzaSolVaultPda(): [PublicKey, number] {
 export function zincBuybackSolVaultPda(): [PublicKey, number] {
   return PublicKey.findProgramAddressSync(
     [ZINC_SEED_BUYBACK_SOL_VAULT],
+    ZINC_PROGRAM_ID,
+  );
+}
+
+/** ZINC staking SOL-reward vault PDA (singleton; source of the stZINC SOL-yield
+ *  leg): PDA([b"staking-sol-reward-vault"]) == 4xzryReuJRamP4zKEdJagsWQaCYQQvN7aT64LFmu2b4A. */
+export function zincStakingSolRewardVaultPda(): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from("staking-sol-reward-vault")],
     ZINC_PROGRAM_ID,
   );
 }
