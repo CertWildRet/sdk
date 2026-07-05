@@ -962,4 +962,66 @@ export class AdminApi {
       .instruction();
     return this.cosign(ix, args.feeCosigner, args.admin);
   }
+
+  /**
+   * Cosigned: set the dZINC pool NET-deploy floor (mirror of ZINC
+   * `config.min_deploy_lamports`; live 0.01 SOL as of 2026-07-05). 0 disables
+   * the local pre-check (ZINC's own on-chain floor still binds at CPI). The
+   * state-var successor of the retired compile-time ZINC_MIN_DEPLOY_LAMPORTS
+   * const — tracking a ZINC-side floor change is this admin op, never a
+   * program upgrade.
+   *
+   * Wires ZincPoolAdmin: config, admin, bucket, zinc_pool, instructions.
+   */
+  async setZincPoolMinDeploy(args: {
+    bucket: Bucket;
+    minDeployLamports: anchor.BN | number;
+    admin: Signer;
+    feeCosigner: FeeCosigner;
+  }): Promise<string> {
+    const [bucketPda] = findBucket(this.c.programId, args.bucket);
+    const [zincPool] = zincPoolPda(this.c.programId, args.bucket);
+    const ix = await this.c.program.methods
+      .setZincPoolMinDeploy(new anchor.BN(args.minDeployLamports.toString()))
+      .accountsPartial({
+        config: this.c.configPda,
+        admin: args.admin.publicKey,
+        bucket: bucketPda,
+        zincPool,
+        instructions: SYSVAR_INSTRUCTIONS_PUBKEY,
+      })
+      .instruction();
+    return this.cosign(ix, args.feeCosigner, args.admin);
+  }
+
+  /**
+   * Cosigned, ONE-TIME per pool (v1.3.x): grow a LIVE ZincPool by 8 bytes and
+   * seed the appended `min_deploy_lamports` field. MUST run immediately after
+   * the program upgrade — every typed ZincPool ix fails to deserialize on the
+   * old account size until it does. Refuses already-migrated pools and
+   * pre-staking pools (those need migrateZincPoolStaking first).
+   *
+   * Wires MigrateZincPoolStaking (same account set): config, admin, bucket,
+   * zinc_pool (raw), instructions, system_program.
+   */
+  async migrateZincPoolMinDeploy(args: {
+    bucket: Bucket;
+    admin: Signer;
+    feeCosigner: FeeCosigner;
+  }): Promise<string> {
+    const [bucketPda] = findBucket(this.c.programId, args.bucket);
+    const [zincPool] = zincPoolPda(this.c.programId, args.bucket);
+    const ix = await this.c.program.methods
+      .migrateZincPoolMinDeploy()
+      .accountsPartial({
+        config: this.c.configPda,
+        admin: args.admin.publicKey,
+        bucket: bucketPda,
+        zincPool,
+        instructions: SYSVAR_INSTRUCTIONS_PUBKEY,
+        systemProgram: SystemProgram.programId,
+      })
+      .instruction();
+    return this.cosign(ix, args.feeCosigner, args.admin);
+  }
 }
