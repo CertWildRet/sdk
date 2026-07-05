@@ -1019,4 +1019,78 @@ export class CrankApi {
       { commitment: "confirmed" },
     );
   }
+
+  /**
+   * v1.4.0 dZINC Stage 2: operator-gated reserve top-up — THE only smelt site.
+   * All-or-nothing smelt of the profile's uZINC (credit-then-convert: any
+   * growth since the window's settle is accrued first, atomically), war-chest
+   * skim, stake-all, and the measured grams + net-valued legs fold into the
+   * exit reserve (zinc_reserve_grams / reserve_backed_net_zinc). Operator-gated
+   * so the 10% smelt fee / refining reset cannot be griefed. Run on the reserve
+   * low-water / unbacked-entitlement trigger and before serving any exit the
+   * current reserve cannot cover. Requires the settled OPEN window.
+   *
+   * Wires BatchReplenishZinc (the SettleHarvestZinc set, operator-signed):
+   * bucket, zinc_pool, mining_authority, zinc_custody_ata, zinc_mint,
+   * zinc_player_profile, zinc_config, zinc_treasury,
+   * zinc_round_zinc_reward_token_account, zinc_stake_position,
+   * zinc_staking_token_account, zinc_program, operator, token_program,
+   * associated_token_program, system_program.
+   */
+  async batchReplenishZinc(args: { bucket: Bucket; operator: Signer }): Promise<string> {
+    const addrs = deriveBucketAddresses(this.c.programId, args.bucket);
+    const [zincPool] = zincPoolPda(this.c.programId, args.bucket);
+    const [miningAuthority] = findMiningAuthority(this.c.programId, args.bucket);
+    const custodyAta = zincCustodyAta(miningAuthority);
+    const [zincPlayerProfile] = zincPlayerProfilePda(miningAuthority);
+    const [zincRewardTa] = zincRoundRewardTokenAccountPda();
+    const [zincStakePosition] = zincStakePositionPda(miningAuthority);
+    const [zincStakingTa] = zincStakingTokenAccountPda();
+
+    return this.c.program.methods
+      .batchReplenishZinc()
+      .accountsPartial({
+        bucket: addrs.bucket,
+        zincPool,
+        miningAuthority,
+        zincCustodyAta: custodyAta,
+        zincMint: ZINC_MINT,
+        zincPlayerProfile,
+        zincConfig: ZINC_CONFIG,
+        zincTreasury: ZINC_TREASURY,
+        zincRoundZincRewardTokenAccount: zincRewardTa,
+        zincStakePosition,
+        zincStakingTokenAccount: zincStakingTa,
+        zincProgram: ZINC_PROGRAM_ID,
+        operator: args.operator.publicKey,
+        tokenProgram: ZINC_TOKEN_PROGRAM,
+        associatedTokenProgram: ZINC_ATA_PROGRAM,
+        systemProgram: SystemProgram.programId,
+      })
+      // smelt CPI + stake CPI + accrual; headroom like settle.
+      .preInstructions([ComputeBudgetProgram.setComputeUnitLimit({ units: 600_000 })])
+      .signers([args.operator])
+      .rpc();
+  }
+
+  /**
+   * v1.4.0 permissionless one-time migration of a single pre-lazy (74-byte)
+   * ZincPosition to the full size (zero-seeded legs — correct for every
+   * pre-upgrade position). The payer funds the ~0.00033 SOL rent delta.
+   * Refuses anything that is not a genuine 74-byte program-owned ZincPosition.
+   */
+  async migrateZincPosition(args: {
+    position: PublicKey;
+    payer: Signer;
+  }): Promise<string> {
+    return this.c.program.methods
+      .migrateZincPosition()
+      .accountsPartial({
+        zincPosition: args.position,
+        payer: args.payer.publicKey,
+        systemProgram: SystemProgram.programId,
+      })
+      .signers([args.payer])
+      .rpc();
+  }
 }

@@ -1024,4 +1024,38 @@ export class AdminApi {
       .instruction();
     return this.cosign(ix, args.feeCosigner, args.admin);
   }
+
+  /**
+   * Cosigned, ONE-TIME per pool (v1.4.0): grow a LIVE v1.3.2-era ZincPool
+   * (exactly 280 bytes) to the full lazy-smelt size and zero-seed the appended
+   * uZINC ledger (accumulators, watermarks, outstanding, reserve). MUST run
+   * immediately after the v1.4.0 program upgrade — every typed ZincPool ix
+   * fails to deserialize on the old size until it does. Then run
+   * crank.migrateZincPosition for each live 74-byte position, and ONE manual
+   * crank.batchReplenishZinc so exits with uZINC entitlement can be served
+   * before the keeper reserve loop ships.
+   *
+   * Wires MigrateZincPoolStaking (same account set): config, admin, bucket,
+   * zinc_pool (raw), instructions, system_program.
+   */
+  async migrateZincPoolLazy(args: {
+    bucket: Bucket;
+    admin: Signer;
+    feeCosigner: FeeCosigner;
+  }): Promise<string> {
+    const [bucketPda] = findBucket(this.c.programId, args.bucket);
+    const [zincPool] = zincPoolPda(this.c.programId, args.bucket);
+    const ix = await this.c.program.methods
+      .migrateZincPoolLazy()
+      .accountsPartial({
+        config: this.c.configPda,
+        admin: args.admin.publicKey,
+        bucket: bucketPda,
+        zincPool,
+        instructions: SYSVAR_INSTRUCTIONS_PUBKEY,
+        systemProgram: SystemProgram.programId,
+      })
+      .instruction();
+    return this.cosign(ix, args.feeCosigner, args.admin);
+  }
 }
