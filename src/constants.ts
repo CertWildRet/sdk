@@ -52,6 +52,14 @@ export const PENDING_TREASURY_SEED = Buffer.from("pending_treasury");
 /** Per-user parked-deposit ticket: PDA([PENDING_SEED, bucket_id, owner]). */
 export const PENDING_SEED = Buffer.from("pending");
 
+/** Per-bucket queued-exit state PDA: PDA([PENDING_WITHDRAW_STATE_SEED, bucket_id]). */
+export const PENDING_WITHDRAW_STATE_SEED = Buffer.from("pending_withdraw_state");
+/** Per-bucket SPL escrow of queued share tokens: PDA([PENDING_SHARES_SEED, bucket_id]). */
+export const PENDING_SHARES_SEED = Buffer.from("pending_shares");
+/** Per-user queued-exit tickets, seed-split by bucket flavor. */
+export const PENDING_WITHDRAW_ORE_SEED = Buffer.from("pending_withdraw_ore");
+export const PENDING_WITHDRAW_ZINC_SEED = Buffer.from("pending_withdraw_zinc");
+
 // ─── Referral program ────────────────────────────────────────────────────
 /** Global referral config PDA: PDA([REFERRAL_CONFIG_SEED]). */
 export const REFERRAL_CONFIG_SEED = Buffer.from("referral_config");

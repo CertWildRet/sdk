@@ -10,6 +10,10 @@ import {
   findFeeSchedule,
   findMiningAuthority,
   findPendingDeposit,
+  findPendingWithdrawOre,
+  findPendingWithdrawState,
+  findPendingWithdrawZinc,
+  findShareEscrow,
   findPendingState,
   findPendingTreasury,
   findReferralConfig,
@@ -160,6 +164,24 @@ export class ReadApi {
   }
 
   /** A single owner's parked-deposit ticket, or null if none open. */
+  /** Queued-exit buffer state (queued_shares_total / queued_count). */
+  async pendingWithdrawState(bucket: Bucket): Promise<any | null> {
+    const [pda] = findPendingWithdrawState(this.c.programId, bucket);
+    return this.c.program.account.pendingWithdrawState.fetchNullable(pda);
+  }
+
+  /** A user's queued-exit ticket on the ORE bucket ("Claim Queued" state). */
+  async pendingWithdrawOre(bucket: Bucket, owner: PublicKey): Promise<any | null> {
+    const [pda] = findPendingWithdrawOre(this.c.programId, bucket, owner);
+    return this.c.program.account.pendingWithdraw.fetchNullable(pda);
+  }
+
+  /** A user's queued-exit ticket on the dZINC bucket. */
+  async pendingWithdrawZinc(bucket: Bucket, owner: PublicKey): Promise<any | null> {
+    const [pda] = findPendingWithdrawZinc(this.c.programId, bucket, owner);
+    return this.c.program.account.pendingWithdraw.fetchNullable(pda);
+  }
+
   async pendingDeposit(bucket: Bucket, owner: PublicKey): Promise<any | null> {
     const [pda] = findPendingDeposit(this.c.programId, bucket, owner);
     return this.c.program.account.pendingDeposit.fetchNullable(pda);
@@ -175,6 +197,18 @@ export class ReadApi {
   ): Promise<Array<{ publicKey: PublicKey; account: any }>> {
     const bucketByte = utils.bytes.bs58.encode(Buffer.from([(bucket as number) & 0xff]));
     return this.c.program.account.pendingDeposit.all([
+      { memcmp: { offset: 8 + 32, bytes: bucketByte } },
+    ]);
+  }
+
+  /** All open queued-exit tickets for a bucket (bucket_id memcmp @ 8+32).
+   *  Flavor == bucket by construction (the queue gates enforce it), so this
+   *  returns exactly the tickets the bucket's finalize path can execute. */
+  async allPendingWithdraws(
+    bucket: Bucket,
+  ): Promise<Array<{ publicKey: PublicKey; account: any }>> {
+    const bucketByte = utils.bytes.bs58.encode(Buffer.from([(bucket as number) & 0xff]));
+    return this.c.program.account.pendingWithdraw.all([
       { memcmp: { offset: 8 + 32, bytes: bucketByte } },
     ]);
   }

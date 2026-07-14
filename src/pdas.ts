@@ -9,6 +9,10 @@ import {
   MINING_SEED,
   PENDING_SEED,
   PENDING_STATE_SEED,
+  PENDING_WITHDRAW_STATE_SEED,
+  PENDING_SHARES_SEED,
+  PENDING_WITHDRAW_ORE_SEED,
+  PENDING_WITHDRAW_ZINC_SEED,
   PENDING_TREASURY_SEED,
   ORE_LST_PROGRAM_ID,
   ORE_LST_SEED_VAULT,
@@ -199,6 +203,52 @@ export function findPendingDeposit(
 ): [PublicKey, number] {
   return PublicKey.findProgramAddressSync(
     [PENDING_SEED, Buffer.from([bucketId]), owner.toBuffer()],
+    programId,
+  );
+}
+
+/** Per-bucket queued-exit buffer state PDA (withdraw twin of PendingState). */
+export function findPendingWithdrawState(
+  programId: PublicKey,
+  bucketId: number,
+): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync(
+    [PENDING_WITHDRAW_STATE_SEED, Buffer.from([bucketId])],
+    programId,
+  );
+}
+
+/** Per-bucket SPL escrow holding queued share tokens (authority = bucket PDA). */
+export function findShareEscrow(
+  programId: PublicKey,
+  bucketId: number,
+): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync(
+    [PENDING_SHARES_SEED, Buffer.from([bucketId])],
+    programId,
+  );
+}
+
+/** Per-user queued-exit ticket PDA, ORE-bucket flavor. */
+export function findPendingWithdrawOre(
+  programId: PublicKey,
+  bucketId: number,
+  owner: PublicKey,
+): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync(
+    [PENDING_WITHDRAW_ORE_SEED, Buffer.from([bucketId]), owner.toBuffer()],
+    programId,
+  );
+}
+
+/** Per-user queued-exit ticket PDA, dZINC-bucket flavor. */
+export function findPendingWithdrawZinc(
+  programId: PublicKey,
+  bucketId: number,
+  owner: PublicKey,
+): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync(
+    [PENDING_WITHDRAW_ZINC_SEED, Buffer.from([bucketId]), owner.toBuffer()],
     programId,
   );
 }

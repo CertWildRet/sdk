@@ -15,6 +15,7 @@ import {
 } from "@solana/spl-token";
 import {
   Bucket,
+  STORE_MINT,
   ZINC_ATA_PROGRAM,
   ZINC_MINT,
   ZINC_TOKEN_PROGRAM,
@@ -27,6 +28,10 @@ import {
   findFeeSchedule,
   findMiningAuthority,
   findPendingDeposit,
+  findPendingWithdrawOre,
+  findPendingWithdrawZinc,
+  findPendingWithdrawState,
+  findShareEscrow,
   findPendingState,
   findPendingTreasury,
   findPosition,
@@ -349,6 +354,154 @@ export class UserApi {
         systemProgram: SystemProgram.programId,
       })
       .signers([args.user])
+      .rpc();
+  }
+
+  /**
+   * QUEUE AN EXIT (v1.5.0, ORE bucket). Usable in ANY phase - the whole point
+   * is that a user never has to race the short OPEN window: share tokens move
+   * into the program escrow now (they stay minted + keep earning), and the
+   * keeper executes the exit permissionlessly in the next settled OPEN window
+   * at that window's frozen NPS - economically identical to a live withdraw
+   * there (exit fee = min(queue-time cap, live)). Cancellable any time via
+   * cancelQueuedWithdraw. Repeat queues accumulate into one ticket.
+   *
+   * Wires QueueWithdraw: config, bucket, pending_withdraw_state, share_escrow,
+   * share_mint, user_share_ata, user, position, pending_withdraw,
+   * user_store_ata (created here, payer = user), store_mint + programs.
+   */
+  async queueWithdraw(args: {
+    bucket: Bucket;
+    shares: BN;
+    user: Signer;
+  }): Promise<string> {
+    const addrs = deriveBucketAddresses(this.c.programId, args.bucket);
+    const [pendingWithdrawState] = findPendingWithdrawState(this.c.programId, args.bucket);
+    const [shareEscrow] = findShareEscrow(this.c.programId, args.bucket);
+    const [pendingWithdraw] = findPendingWithdrawOre(this.c.programId, args.bucket, args.user.publicKey);
+    const [position] = findPosition(this.c.programId, args.bucket, args.user.publicKey);
+    const userShareAta = getAssociatedTokenAddressSync(addrs.shareMint, args.user.publicKey);
+    const userStoreAta = getAssociatedTokenAddressSync(STORE_MINT, args.user.publicKey);
+
+    return this.c.program.methods
+      .queueWithdraw(args.shares)
+      .accountsPartial({
+        config: this.c.configPda,
+        bucket: addrs.bucket,
+        pendingWithdrawState,
+        shareEscrow,
+        shareMint: addrs.shareMint,
+        userShareAta,
+        user: args.user.publicKey,
+        position,
+        pendingWithdraw,
+        userStoreAta,
+        storeMint: STORE_MINT,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+      })
+      .signers([args.user])
+      .rpc();
+  }
+
+  /**
+   * QUEUE AN EXIT (v1.5.0, dZINC bucket). Twin of queueWithdraw; also creates
+   * the user's ZINC payout ATA at queue time (payer = user) so the
+   * permissionless finalize never creates user accounts.
+   */
+  async queueWithdrawZinc(args: {
+    bucket: Bucket;
+    shares: BN;
+    user: Signer;
+  }): Promise<string> {
+    const addrs = deriveBucketAddresses(this.c.programId, args.bucket);
+    const [zincPool] = zincPoolPda(this.c.programId, args.bucket);
+    const [zincPosition] = zincPositionPda(this.c.programId, args.bucket, args.user.publicKey);
+    const [pendingWithdrawState] = findPendingWithdrawState(this.c.programId, args.bucket);
+    const [shareEscrow] = findShareEscrow(this.c.programId, args.bucket);
+    const [pendingWithdraw] = findPendingWithdrawZinc(this.c.programId, args.bucket, args.user.publicKey);
+    const userShareAta = getAssociatedTokenAddressSync(addrs.shareMint, args.user.publicKey);
+    const userZincAta = zincUserAta(args.user.publicKey);
+
+    return this.c.program.methods
+      .queueWithdrawZinc(args.shares)
+      .accountsPartial({
+        config: this.c.configPda,
+        bucket: addrs.bucket,
+        zincPool,
+        pendingWithdrawState,
+        shareEscrow,
+        shareMint: addrs.shareMint,
+        userShareAta,
+        user: args.user.publicKey,
+        zincPosition,
+        pendingWithdraw,
+        userZincAta,
+        zincMint: ZINC_MINT,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+      })
+      .signers([args.user])
+      .rpc();
+  }
+
+  /**
+   * Cancel a queued exit (ORE bucket): escrowed shares return to the owner's
+   * share ATA (created idempotently, payer = owner). ANY phase, EVEN PAUSED -
+   * the unconditional no-stuck-shares escape.
+   */
+  async cancelQueuedWithdraw(args: {
+    bucket: Bucket;
+    owner: Signer;
+  }): Promise<string> {
+    const addrs = deriveBucketAddresses(this.c.programId, args.bucket);
+    const [pendingWithdrawState] = findPendingWithdrawState(this.c.programId, args.bucket);
+    const [shareEscrow] = findShareEscrow(this.c.programId, args.bucket);
+    const [pendingWithdraw] = findPendingWithdrawOre(this.c.programId, args.bucket, args.owner.publicKey);
+    const ownerShareAta = getAssociatedTokenAddressSync(addrs.shareMint, args.owner.publicKey);
+
+    return this.c.program.methods
+      .cancelQueuedWithdraw()
+      .accountsPartial({
+        bucket: addrs.bucket,
+        pendingWithdrawState,
+        shareEscrow,
+        shareMint: addrs.shareMint,
+        owner: args.owner.publicKey,
+        ownerShareAta,
+        pendingWithdraw,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+      })
+      .signers([args.owner])
+      .rpc();
+  }
+
+  /** dZINC twin of cancelQueuedWithdraw (zinc ticket seeds). */
+  async cancelQueuedWithdrawZinc(args: {
+    bucket: Bucket;
+    owner: Signer;
+  }): Promise<string> {
+    const addrs = deriveBucketAddresses(this.c.programId, args.bucket);
+    const [pendingWithdrawState] = findPendingWithdrawState(this.c.programId, args.bucket);
+    const [shareEscrow] = findShareEscrow(this.c.programId, args.bucket);
+    const [pendingWithdraw] = findPendingWithdrawZinc(this.c.programId, args.bucket, args.owner.publicKey);
+    const ownerShareAta = getAssociatedTokenAddressSync(addrs.shareMint, args.owner.publicKey);
+
+    return this.c.program.methods
+      .cancelQueuedWithdrawZinc()
+      .accountsPartial({
+        bucket: addrs.bucket,
+        pendingWithdrawState,
+        shareEscrow,
+        shareMint: addrs.shareMint,
+        owner: args.owner.publicKey,
+        ownerShareAta,
+        pendingWithdraw,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+      })
+      .signers([args.owner])
       .rpc();
   }
 

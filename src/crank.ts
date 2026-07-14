@@ -39,9 +39,13 @@ import {
   findFeeSchedule,
   findMiningAuthority,
   findPendingDeposit,
+  findPendingWithdrawOre,
+  findPendingWithdrawState,
+  findPendingWithdrawZinc,
+  findPosition,
+  findShareEscrow,
   findPendingState,
   findPendingTreasury,
-  findPosition,
   findReferralConfig,
   findReferralTreasury,
   findReferrerState,
@@ -74,6 +78,7 @@ import {
   zincStockpileSolVaultPda,
   zincStockpileTokenAccountPda,
   zincStockpileWinnersPda,
+  zincUserAta,
 } from "./pdas";
 
 const ALL_SQUARES: boolean[] = Array.from({ length: 25 }, () => true);
@@ -313,6 +318,91 @@ export class CrankApi {
       // the 200k default CU. Raise the ceiling (free - no CU price set).
       .preInstructions([ComputeBudgetProgram.setComputeUnitLimit({ units: 1_000_000 })])
       .signers([args.operator])
+      .rpc();
+  }
+
+  /**
+   * Execute a queued ORE-bucket exit (v1.5.0). Permissionless; the keeper runs
+   * these right after settle + reserve in the OPEN window. A fail-closed
+   * ReserveShortfall revert leaves the ticket intact (retry after the batch).
+   */
+  async finalizeQueuedWithdraw(args: {
+    bucket: Bucket;
+    owner: PublicKey;
+    finalizer: Signer;
+  }): Promise<string> {
+    const addrs = deriveBucketAddresses(this.c.programId, args.bucket);
+    const [pendingWithdrawState] = findPendingWithdrawState(this.c.programId, args.bucket);
+    const [shareEscrow] = findShareEscrow(this.c.programId, args.bucket);
+    const [pendingWithdraw] = findPendingWithdrawOre(this.c.programId, args.bucket, args.owner);
+    const [position] = findPosition(this.c.programId, args.bucket, args.owner);
+    const ownerStoreAta = getAssociatedTokenAddressSync(STORE_MINT, args.owner);
+
+    return this.c.program.methods
+      .finalizeQueuedWithdraw()
+      .accountsPartial({
+        bucket: addrs.bucket,
+        treasury: addrs.treasury,
+        shareMint: addrs.shareMint,
+        pendingWithdrawState,
+        shareEscrow,
+        owner: args.owner,
+        finalizer: args.finalizer.publicKey,
+        position,
+        pendingWithdraw,
+        config: this.c.configPda,
+        storeTreasury: addrs.storeTreasury,
+        ownerStoreAta,
+        storeMint: STORE_MINT,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+      })
+      .signers([args.finalizer])
+      .rpc();
+  }
+
+  /**
+   * Execute a queued dZINC exit (v1.5.0). Permissionless; inherits the
+   * unstake-shortfall CPI, so attach generous compute via the default budget.
+   */
+  async finalizeQueuedWithdrawZinc(args: {
+    bucket: Bucket;
+    owner: PublicKey;
+    finalizer: Signer;
+  }): Promise<string> {
+    const addrs = deriveBucketAddresses(this.c.programId, args.bucket);
+    const [zincPool] = zincPoolPda(this.c.programId, args.bucket);
+    const [zincPosition] = zincPositionPda(this.c.programId, args.bucket, args.owner);
+    const [pendingWithdrawState] = findPendingWithdrawState(this.c.programId, args.bucket);
+    const [shareEscrow] = findShareEscrow(this.c.programId, args.bucket);
+    const [pendingWithdraw] = findPendingWithdrawZinc(this.c.programId, args.bucket, args.owner);
+    const [miningAuthority] = findMiningAuthority(this.c.programId, args.bucket);
+    const custodyAta = zincCustodyAta(miningAuthority);
+    const ownerZincAta = zincUserAta(args.owner);
+
+    return this.c.program.methods
+      .finalizeQueuedWithdrawZinc()
+      .accountsPartial({
+        bucket: addrs.bucket,
+        zincPool,
+        treasury: addrs.treasury,
+        shareMint: addrs.shareMint,
+        pendingWithdrawState,
+        shareEscrow,
+        owner: args.owner,
+        finalizer: args.finalizer.publicKey,
+        zincPosition,
+        pendingWithdraw,
+        config: this.c.configPda,
+        miningAuthority,
+        zincCustodyAta: custodyAta,
+        ownerZincAta,
+        zincMint: ZINC_MINT,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+      })
+      .preInstructions([ComputeBudgetProgram.setComputeUnitLimit({ units: 600_000 })])
+      .signers([args.finalizer])
       .rpc();
   }
 
