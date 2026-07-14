@@ -242,6 +242,24 @@ export class CrankApi {
    * operator, token_program, associated_token_program, system_program.
    */
   async batchReplenish(args: { bucket: Bucket; operator: Signer }): Promise<string> {
+    return this.batchReplenishImpl(args, false);
+  }
+
+  /**
+   * v1.5.0 evacuation lever: claim-all (bps=10000) + wrap into the reserve,
+   * allowed ONLY while the bucket is PAUSED (admin flips set_pause first).
+   * For ORE-side incidents / migrations / wind-down, where the lazy batch
+   * (which never claims beyond the backing need) would leave the pile
+   * stranded on the external miner PDA. Same account set as batchReplenish.
+   */
+  async batchReplenishFull(args: { bucket: Bucket; operator: Signer }): Promise<string> {
+    return this.batchReplenishImpl(args, true);
+  }
+
+  private async batchReplenishImpl(
+    args: { bucket: Bucket; operator: Signer },
+    full: boolean,
+  ): Promise<string> {
     const addrs = deriveBucketAddresses(this.c.programId, args.bucket);
     const [miningAuthority] = findMiningAuthority(this.c.programId, args.bucket);
     const [oreMiner] = oreMinerPda(miningAuthority);
@@ -259,8 +277,10 @@ export class CrankApi {
     const oreLstStakeOreAta = getAssociatedTokenAddressSync(ORE_MINT, oreLstStake, true);
     const oreLstTreasuryOreAta = getAssociatedTokenAddressSync(ORE_MINT, oreLstTreasury, true);
 
-    return this.c.program.methods
-      .batchReplenish()
+    const method = full
+      ? this.c.program.methods.batchReplenishFull()
+      : this.c.program.methods.batchReplenish();
+    return method
       .accountsPartial({
         bucket: addrs.bucket,
         treasury: addrs.treasury,
