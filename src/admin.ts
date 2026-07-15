@@ -18,6 +18,9 @@ import { CwrVaultClient } from "./client";
 import {
   deriveBucketAddresses,
   findBucket,
+  findShareMint,
+  findShareEscrow,
+  findPendingWithdrawState,
   findFeeBucket,
   findFeeSchedule,
   findMiningAuthority,
@@ -250,6 +253,36 @@ export class AdminApi {
         bucket: bucketPda,
         pendingState,
         pendingTreasury,
+        systemProgram: SystemProgram.programId,
+        instructions: SYSVAR_INSTRUCTIONS_PUBKEY,
+      })
+      .instruction();
+    return this.cosign(ix, args.feeCosigner, args.admin);
+  }
+
+  /** v1.5.0 queued exits: one-time per-bucket setup (cosigned). Creates the
+   *  PendingWithdrawState sidecar + the share-token escrow (mint = the
+   *  bucket's share mint, authority = bucket PDA). Run on BOTH buckets
+   *  right after the v1.5.0 upgrade. */
+  async initPendingWithdraw(args: {
+    bucket: Bucket;
+    admin: Signer;
+    feeCosigner: FeeCosigner;
+  }): Promise<string> {
+    const [bucketPda] = findBucket(this.c.programId, args.bucket);
+    const [shareMint] = findShareMint(this.c.programId, args.bucket);
+    const [pendingWithdrawState] = findPendingWithdrawState(this.c.programId, args.bucket);
+    const [shareEscrow] = findShareEscrow(this.c.programId, args.bucket);
+    const ix = await this.c.program.methods
+      .initPendingWithdraw(args.bucket)
+      .accountsPartial({
+        config: this.c.configPda,
+        admin: args.admin.publicKey,
+        bucket: bucketPda,
+        pendingWithdrawState,
+        shareEscrow,
+        shareMint,
+        tokenProgram: TOKEN_PROGRAM_ID,
         systemProgram: SystemProgram.programId,
         instructions: SYSVAR_INSTRUCTIONS_PUBKEY,
       })
