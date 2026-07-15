@@ -9,6 +9,7 @@ import {
   findFeeBucket,
   findFeeSchedule,
   findMiningAuthority,
+  findPosition,
   findPendingDeposit,
   findPendingWithdrawOre,
   findPendingWithdrawState,
@@ -246,6 +247,13 @@ export class ReadApi {
   async zincPool(bucket: Bucket): Promise<ZincPoolState | null> {
     const [pda] = zincPoolPda(this.c.programId, bucket);
     return this.c.program.account.zincPool.fetchNullable(pda) as Promise<ZincPoolState | null>;
+  }
+
+  /** A single owner's dORE Position (shares + the two uORE credit legs), or
+   *  null if the owner never deposited into the dORE pool. */
+  async position(bucket: Bucket, owner: PublicKey): Promise<any | null> {
+    const [pda] = findPosition(this.c.programId, bucket, owner);
+    return this.c.program.account.position.fetchNullable(pda);
   }
 
   /**
