@@ -310,7 +310,9 @@ export class CrankApi {
   }
 
   /** STAKING_EXITS phase: settle `owner`'s staking exit (rung-3 self-claim ORE accounts,
-   *  if any, go in `remainingAccounts` — empty on v1). */
+   *  if any, go in `remainingAccounts` — empty on v1). When populated (monetize/LITE
+   *  un-darkening), it is the 18-account rung-3 set: the last two MUST be
+   *  ore_stake_program (stakecNP3) then ore_lst_program (storeD7 = the ix_wrap callee). */
   async settleStakingExit(
     owner: PublicKey,
     windowId: bigint,

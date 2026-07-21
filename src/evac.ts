@@ -66,10 +66,12 @@ export class EvacApi {
    * Cosigned — bundle buildCosignEd25519Ix({cosigner, ix, nonce, signedTs}) BEFORE this ix in the same tx.
    *
    * `authorizer` is the fee-holder admin (it fills both the `admin` and `cranker`
-   * signer slots). `remainingAccounts` are the 16 ORE accounts required to unwind
-   * the miner/stake positions; pass `[]` only for gate-reject probes that revert
-   * before touching them. The `window` PDA is passed explicitly (derived from the
-   * live `config.current_window_id`), matching the bankrun-proven flow.
+   * signer slots). `remainingAccounts` are the 17 ORE accounts required to unwind
+   * the miner/stake positions — the last two MUST be ore_stake_program (stakecNP3)
+   * then ore_lst_program (storeD7 = ORE_LST_PROGRAM_ID, the ix_wrap CPI callee);
+   * pass `[]` only for gate-reject probes that revert before touching them. The
+   * `window` PDA is passed explicitly (derived from the live
+   * `config.current_window_id`), matching the bankrun-proven flow.
    */
   async evacuateClaimAll(
     authorizer: PublicKey,
