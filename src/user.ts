@@ -37,6 +37,9 @@ import {
   pdaReferrer,
   pdaReferralConfig,
   pdaReferralTreasury,
+  pdaFeeSchedule,
+  pdaFeeBucket,
+  pdaFeeExempt,
 } from "./pdas";
 
 const bn = (v: bigint): BN => new BN(v.toString());
@@ -183,6 +186,22 @@ export class UserApi {
         referralConfig: pdaReferralConfig()[0],
         referralTreasury: pdaReferralTreasury()[0],
         ixSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
+        systemProgram: SystemProgram.programId,
+      })
+      .instruction();
+  }
+
+  /** Claim the caller's materialized external deploy-fee rebate in SOL. `owner` signs. */
+  async claimExternalFeeRebate(owner: PublicKey): Promise<TransactionInstruction> {
+    return this.client.program.methods
+      .claimExternalFeeRebate()
+      .accountsPartial({
+        miningPool: pdaMiningPool()[0],
+        feeSchedule: pdaFeeSchedule()[0],
+        feeExemptEntry: pdaFeeExempt(owner)[0],
+        position: pdaPosition(POOL_MINING, owner)[0],
+        feeBucket: pdaFeeBucket()[0],
+        owner,
         systemProgram: SystemProgram.programId,
       })
       .instruction();

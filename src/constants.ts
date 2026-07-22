@@ -29,6 +29,17 @@ export const UORE_ACC_SCALE = 1_000_000_000_000_000_000n; // 1e18
 export const NAV_SCALE = 1_000_000_000_000_000_000n; // 1e18
 export const FS_SCALE_PPM = 1_000_000; // mining_fs_bps stored in ppm; fs=1.0 → 1_000_000
 
+// Fee defaults and immutable ceilings.
+export const DEFAULT_CLAIM_FEE_BPS = 1_000;
+export const DEFAULT_ADMIN_FEE_BPS = 25;
+export const DEFAULT_PP_SHARE_MINING_BPS = 5_000;
+export const DEFAULT_PP_SHARE_STAKING_BPS = 5_000;
+export const DEFAULT_ENTRY_FEE_MINING_BPS = 0;
+export const DEFAULT_ENTRY_FEE_STAKING_BPS = 100;
+export const DEFAULT_ENTRY_FEE_PROTOCOL_BPS = 0;
+export const DEFAULT_FEE_RETAIN_BPS = 10_000;
+export const MAX_ADMIN_FEE_BPS = 25;
+
 // SPL layout offsets (for raw reads where needed)
 export const SPL_TOKEN_ACCOUNT_OFF_AMOUNT = 64;
 export const SPL_MINT_OFF_SUPPLY = 36;
@@ -65,6 +76,60 @@ export const PP_DEPOSIT_MODE_DISABLED = 0;
 export const PP_DEPOSIT_MODE_WHITELIST = 1;
 export const PP_DEPOSIT_MODE_OPEN = 2;
 
+// Protocol Pool access mode.
+export const PP_MODE_WHITELIST = 0;
+export const PP_MODE_PUBLIC = 1;
+
+// Team Ops Treasury withdrawal assets.
+export const FEE_ASSET_SOL = 0;
+export const FEE_ASSET_STORE = 1;
+export type FeeAsset = typeof FEE_ASSET_SOL | typeof FEE_ASSET_STORE;
+
+// Generic per-wallet external-fee exemption scopes.
+export const FEE_EXEMPT_SCOPE_EXTERNAL_DEPLOY = 1 << 0;
+export const FEE_EXEMPT_SCOPE_PERF_FEE = 1 << 1;
+export const FEE_EXEMPT_VALID_MASK =
+  FEE_EXEMPT_SCOPE_EXTERNAL_DEPLOY | FEE_EXEMPT_SCOPE_PERF_FEE;
+
+/** Stable `setParam` selectors. Values are append-only on-chain. */
+export const CONFIG_FIELD = {
+  CLAIM_FEE_BPS: 0,
+  ADMIN_FEE_BPS: 1,
+  PP_SHARE_MINING_BPS: 2,
+  PP_SHARE_STAKING_BPS: 3,
+  ENTRY_FEE_MINING_BPS: 4,
+  ENTRY_FEE_STAKING_BPS: 5,
+  ENTRY_FEE_PROTOCOL_BPS: 6,
+  WINDOW_PERIOD_SECS: 7,
+  EPOCH_LEN_WINDOWS: 8,
+  PP_EXIT_NOTICE_WINDOWS: 9,
+  ADVANCE_CAP_R_BPS: 10,
+  TREASURY_ADVANCE_BUDGET_BPS: 11,
+  PP_SOL_SLEEVE_MAX_BPS: 12,
+  MAX_DEPLOY_PER_ROUND: 13,
+  MAX_DEPLOY_PER_WINDOW: 14,
+  MAX_PER_TILE: 15,
+  MIN_TILES: 16,
+  MAX_TILES: 17,
+  BANKROLL_FLOOR: 18,
+  MAX_DEPLOY_IXS_PER_CRANK: 19,
+  GUARD_BAND_SLOTS: 20,
+  CLAIM_GRANULARITY: 21,
+  EXIT_DELIVERY_ASSET: 22,
+  PP_MODE: 23,
+  PP_DEPOSIT_MODE: 24,
+  RUNG3_ENABLED: 25,
+  MONETIZE_SHARE_BPS: 26,
+  LITE_PHANTOM_ENABLED: 27,
+  PHANTOM_DUST_CEILING_GRAMS: 28,
+  CAP_BREACH_MAX_WINDOWS: 29,
+  CAP_HARD_CEILING_BPS: 30,
+  I10_FLOOR_BPS: 31,
+  ST_TVL_CAP: 32,
+  PP_SHORTFALL_CRYSTALLIZE_ENABLED: 33,
+} as const;
+export type ConfigField = (typeof CONFIG_FIELD)[keyof typeof CONFIG_FIELD];
+
 // ─── emergency switches (set_emergency selector; constants.rs) ───────────────
 export const EMERGENCY_MINING = 0;
 export const EMERGENCY_STAKING = 1;
@@ -94,6 +159,7 @@ export const SEED = {
   referralTreasury: S("referral_treasury"),
   referrer: S("referrer"),
   whitelist: S("whitelist"),
+  feeExempt: S("fee_exempt"),
   phantomMember: S("phantom_member"),
   evacCustody: S("evac_custody"),
 } as const;

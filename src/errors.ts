@@ -1,5 +1,5 @@
 /**
- * DiamondError code ⇄ name/message map, built from the IDL's error table (77 codes),
+ * DiamondError code ⇄ name/message map, built from the IDL's error table (88 codes),
  * plus a parser that turns a thrown Anchor/SendTransaction error into its named code.
  */
 import { DIAMOND_POOLS_IDL } from "@diamond/abi";

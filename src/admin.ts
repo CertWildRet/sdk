@@ -20,7 +20,19 @@ import {
   SYSVAR_INSTRUCTIONS_PUBKEY,
   TransactionInstruction,
 } from "@solana/web3.js";
-import { STORE_MINT, POOL_MINING, POOL_PROTOCOL } from "./constants";
+import { getAssociatedTokenAddressSync } from "@solana/spl-token";
+import {
+  ASSOCIATED_TOKEN_PROGRAM_ID,
+  BPS_DENOMINATOR,
+  FEE_ASSET_SOL,
+  FEE_ASSET_STORE,
+  FEE_EXEMPT_VALID_MASK,
+  STORE_MINT,
+  TOKEN_PROGRAM_ID,
+  POOL_MINING,
+  POOL_PROTOCOL,
+  type FeeAsset,
+} from "./constants";
 import {
   pdaConfig,
   pdaMiningPool,
@@ -34,6 +46,9 @@ import {
   pdaMiningAuthority,
   pdaVault,
   pdaWhitelist,
+  pdaFeeBucket,
+  pdaFeeExempt,
+  pdaPosition,
 } from "./pdas";
 import type { DiamondPoolsClient } from "./client";
 
@@ -290,6 +305,129 @@ export class AdminApi {
         referralTreasury: pdaReferralTreasury()[0],
         admin,
         ixSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
+        systemProgram: SystemProgram.programId,
+      })
+      .instruction();
+  }
+
+  /** Set retained-fee policy and the Team Ops Treasury destination. Cosigned. */
+  async setFeePolicy(
+    admin: PublicKey,
+    retainBps: number,
+    opsTreasury: PublicKey,
+  ): Promise<TransactionInstruction> {
+    if (!Number.isInteger(retainBps) || retainBps < 0 || retainBps > BPS_DENOMINATOR) {
+      throw new RangeError(`retainBps must be an integer from 0 to ${BPS_DENOMINATOR}`);
+    }
+    if (opsTreasury.equals(PublicKey.default)) {
+      throw new RangeError("opsTreasury must not be the default public key");
+    }
+    return this.client.program.methods
+      .setFeePolicy(retainBps, opsTreasury)
+      .accountsPartial({
+        config: pdaConfig()[0],
+        feeSchedule: pdaFeeSchedule()[0],
+        admin,
+        ixSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
+      })
+      .instruction();
+  }
+
+  /** Withdraw retained SOL or stORE to the configured Team Ops Treasury. Cosigned. */
+  async opsWithdraw(
+    admin: PublicKey,
+    asset: FeeAsset,
+    amount: bigint,
+    opsTreasury: PublicKey,
+  ): Promise<TransactionInstruction> {
+    if (asset !== FEE_ASSET_SOL && asset !== FEE_ASSET_STORE) {
+      throw new RangeError("asset must be FEE_ASSET_SOL or FEE_ASSET_STORE");
+    }
+    if (amount <= 0n) throw new RangeError("amount must be positive");
+    const feeBucket = pdaFeeBucket()[0];
+    return this.client.program.methods
+      .opsWithdraw(asset, new BN(amount.toString()))
+      .accountsPartial({
+        config: pdaConfig()[0],
+        feeSchedule: pdaFeeSchedule()[0],
+        feeBucket,
+        storeMint: STORE_MINT,
+        feeStore: getAssociatedTokenAddressSync(STORE_MINT, feeBucket, true),
+        opsTreasury,
+        opsStoreAta: getAssociatedTokenAddressSync(STORE_MINT, opsTreasury, true),
+        admin,
+        ixSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+      })
+      .instruction();
+  }
+
+  /** Create/update wallet-scoped external deploy/performance fee exemption flags. Cosigned. */
+  async setFeeExempt(
+    admin: PublicKey,
+    wallet: PublicKey,
+    flags: number,
+  ): Promise<TransactionInstruction> {
+    if (flags === 0 || (flags & ~FEE_EXEMPT_VALID_MASK) !== 0) {
+      throw new RangeError("flags must contain only supported fee-exemption scope bits");
+    }
+    return this.client.program.methods
+      .setFeeExempt(wallet, flags)
+      .accountsPartial({
+        config: pdaConfig()[0],
+        miningPool: pdaMiningPool()[0],
+        feeExemptEntry: pdaFeeExempt(wallet)[0],
+        miningPosition: pdaPosition(POOL_MINING, wallet)[0],
+        admin,
+        ixSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
+        systemProgram: SystemProgram.programId,
+      })
+      .instruction();
+  }
+
+  /** Clear a wallet exemption after its materialized rebate has been claimed. Cosigned. */
+  async clearFeeExempt(admin: PublicKey, wallet: PublicKey): Promise<TransactionInstruction> {
+    return this.client.program.methods
+      .clearFeeExempt(wallet)
+      .accountsPartial({
+        config: pdaConfig()[0],
+        miningPool: pdaMiningPool()[0],
+        feeExemptEntry: pdaFeeExempt(wallet)[0],
+        miningPosition: pdaPosition(POOL_MINING, wallet)[0],
+        admin,
+        ixSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
+      })
+      .instruction();
+  }
+
+  /** Sponsor PP liquidity without minting shares. Admin cosigns; `funder` also signs. */
+  async topUpProtocolLiquidity(
+    admin: PublicKey,
+    funder: PublicKey,
+    amount: bigint,
+  ): Promise<TransactionInstruction> {
+    if (amount <= 0n) throw new RangeError("amount must be positive");
+    const protocolVaultAuthority = pdaVault(POOL_PROTOCOL)[0];
+    return this.client.program.methods
+      .topUpProtocolLiquidity(new BN(amount.toString()))
+      .accountsPartial({
+        config: pdaConfig()[0],
+        miningPool: pdaMiningPool()[0],
+        protocolPool: pdaProtocolPool()[0],
+        protocolVaultAuthority,
+        storeMint: STORE_MINT,
+        protocolVaultAta: getAssociatedTokenAddressSync(
+          STORE_MINT,
+          protocolVaultAuthority,
+          true,
+        ),
+        funderStoreAta: getAssociatedTokenAddressSync(STORE_MINT, funder),
+        admin,
+        funder,
+        ixSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
         systemProgram: SystemProgram.programId,
       })
       .instruction();

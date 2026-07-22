@@ -36,6 +36,7 @@ export const pdaOrder = (windowId: bigint | number, owner: PublicKey, poolId: Po
 export const pdaVault = (poolId: PoolId) => pda([SEED.vault, Buffer.from([poolId])]);
 export const pdaReferrer = (referrer: PublicKey) => pda([SEED.referrer, referrer.toBuffer()]);
 export const pdaWhitelist = (wallet: PublicKey) => pda([SEED.whitelist, wallet.toBuffer()]);
+export const pdaFeeExempt = (wallet: PublicKey) => pda([SEED.feeExempt, wallet.toBuffer()]);
 
 // ─── ORE-side PDAs (external programs; needed for freeze / mine / self-claim exits) ──
 export const oreMinerPda = (authority: PublicKey) =>

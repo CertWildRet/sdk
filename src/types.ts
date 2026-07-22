@@ -8,8 +8,9 @@ import type { DiamondPools } from "@diamond/abi";
 export type DiamondAccounts = IdlAccounts<DiamondPools>;
 export type DiamondEvents = IdlEvents<DiamondPools>;
 
-// Account aliases (the 13 program accounts).
+// Account aliases (the 14 program accounts).
 export type Config = DiamondAccounts["config"];
+export type FeeExemptEntry = DiamondAccounts["feeExemptEntry"];
 export type FeeSchedule = DiamondAccounts["feeSchedule"];
 export type MiningPool = DiamondAccounts["miningPool"];
 export type Order = DiamondAccounts["order"];

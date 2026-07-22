@@ -36,11 +36,11 @@ await dp.events.off(id);
 
 Every builder returns a `Promise<TransactionInstruction>` — compose, sign, and send with your own wallet/relayer. The IDL embeds all PDA seeds, so PDAs are resolved for you; you pass only the signers, mints, and external ORE accounts.
 
-- **`dp.user`** — `depositMining`, `depositStore(poolId, …)`, `submitWithdraw(poolId, …)`, `submitPpExitNotice`, `submitPpExit`, `claimReferral`.
+- **`dp.user`** — `depositMining`, `depositStore(poolId, …)`, `submitWithdraw(poolId, …)`, `submitPpExitNotice`, `submitPpExit`, `claimReferral`, `claimExternalFeeRebate`.
 - **`dp.crank`** — the cascade + keeper cranks: `crankFreeze`, `crankAdvancePhase`, `settleMiningDeposit` / `settleStakingDeposit` / `settleProtocolDeposit`, `measureMiningExit`, `payMiningExit`, `settleStakingExit`, `settlePpExit`, `crankCapRebalance`, `crankBatch`, `crankRemarkPhantom`, `crankCheckpoint`, `crankMine`, the monetize cranks (`crankMonetizeSell/Stage/Fold/Abort`), `distributeFees` / `distributeFeesStore`, `distributeReferrals`, `sweepReferralSurplus`, `fundMiningAuthority`, `closeMiningPosition`.
-- **`dp.admin`** — `initialize`, `setParam`, `setEmergency`, `setFeeSchedule`, `setKeeper`, `setSettlementAuthority`, `setAdminTransferConfirmer`, `proposeAdmin` / `confirmAdminTransfer` / `acceptAdmin` / `cancelAdminTransfer`, `addWhitelist` / `removeWhitelist`, `initReferral`.
+- **`dp.admin`** — `initialize`, `setParam`, `setEmergency`, `setFeeSchedule`, `setFeePolicy`, `opsWithdraw`, `setFeeExempt` / `clearFeeExempt`, `topUpProtocolLiquidity`, `setKeeper`, `setSettlementAuthority`, `setAdminTransferConfirmer`, `proposeAdmin` / `confirmAdminTransfer` / `acceptAdmin` / `cancelAdminTransfer`, `addWhitelist` / `removeWhitelist`, `initReferral`.
 - **`dp.evac`** — `evacuateClaimAll`, `redeemEvacuated{Mining,Staking,Protocol}`, `sweepEvacCustody`.
-- **`dp.read`** — typed account fetchers (`config`, `miningPool`, `stakingPool`, `protocolPool`, `position(poolId, owner)`, `window(id)`, …) + `currentWindowId()` + `miningNav()`.
+- **`dp.read`** — typed account fetchers (`config`, `miningPool`, `stakingPool`, `protocolPool`, `feeExemptEntry(wallet)`, `position(poolId, owner)`, `window(id)`, …) + `currentWindowId()` + `miningNav()`.
 - **`dp.events`** — `on(name, handler)`, `off(id)`, `parseLogs(logs)`.
 
 ## Cosigned instructions
@@ -76,7 +76,9 @@ try {
 }
 ```
 
-`DIAMOND_ERRORS` (code → {name, msg}) and `ERROR_CODE` (name → code) are exported for the full 77-code table.
+`DIAMOND_ERRORS` (code → {name, msg}) and `ERROR_CODE` (name → code) are exported for the full 88-code table.
+
+The SDK's build gate checks that all 55 ABI instructions have a builder. The pinned ABI currently exposes 14 accounts, 32 events, and 88 errors.
 
 ## Versioning
 

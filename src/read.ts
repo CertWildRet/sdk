@@ -24,10 +24,12 @@ import {
   pdaOrder,
   pdaReferrer,
   pdaWhitelist,
+  pdaFeeExempt,
 } from "./pdas";
 import type {
   Config,
   FeeSchedule,
+  FeeExemptEntry,
   MiningPool,
   Order,
   PhantomMember,
@@ -120,6 +122,11 @@ export class ReadApi {
   /** The whitelist entry for `wallet`; `null` if not whitelisted. */
   whitelistEntry(wallet: PublicKey): Promise<WhitelistEntry | null> {
     return this.client.program.account.whitelistEntry.fetchNullable(pdaWhitelist(wallet)[0]);
+  }
+
+  /** Wallet-scoped external-fee exemption state; `null` when no flags are configured. */
+  feeExemptEntry(wallet: PublicKey): Promise<FeeExemptEntry | null> {
+    return this.client.program.account.feeExemptEntry.fetchNullable(pdaFeeExempt(wallet)[0]);
   }
 
   // ─── derived views ──────────────────────────────────────────────────────────
