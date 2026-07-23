@@ -456,8 +456,8 @@ export class CrankApi {
   // ─── §5.6b monetization (dark path) ─────────────────────────────────────────
 
   /**
-   * SELL one mining position (`owner`) into the ST book (paged; seals the cycle on
-   * the first call of a window). Signer is the keeper.
+   * SELL one mining position (`owner`) into the buyer books (ST first up to its
+   * cap, then PP above its I10 reserve). Paged; signer is the keeper.
    */
   async crankMonetizeSell(
     keeper: PublicKey,
@@ -465,6 +465,7 @@ export class CrankApi {
     windowId: bigint,
   ): Promise<TransactionInstruction> {
     const stAuth = pdaVault(POOL_STAKING)[0];
+    const ppAuth = pdaVault(POOL_PROTOCOL)[0];
     const miningAuthority = pdaMiningAuthority()[0];
     return this.client.program.methods
       .crankMonetizeSell()
@@ -474,11 +475,14 @@ export class CrankApi {
         miningPool: pdaMiningPool()[0],
         stakingPool: pdaStakingPool()[0],
         protocolPool: pdaProtocolPool()[0],
+        phantomMember: pdaPhantomMember()[0],
         oreMiner: miningAuthorityMinerPda()[0],
         position: pdaPosition(POOL_MINING, owner)[0],
         storeMint: STORE_MINT,
         stakingVaultAuthority: stAuth,
         stakingVaultAta: storeAta(stAuth),
+        protocolVaultAuthority: ppAuth,
+        protocolVaultAta: storeAta(ppAuth),
         miningAuthority,
         monetizeStoreAta: storeAta(miningAuthority),
         keeper,
