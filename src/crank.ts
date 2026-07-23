@@ -12,6 +12,7 @@
  */
 import BN from "bn.js";
 import {
+  type AccountMeta,
   PublicKey,
   SystemProgram,
   SYSVAR_INSTRUCTIONS_PUBKEY,
@@ -132,6 +133,7 @@ export class CrankApi {
       .accountsPartial({
         config: pdaConfig()[0],
         window: pdaWindow(windowId)[0],
+        miningPool: pdaMiningPool()[0],
         stakingPool: pdaStakingPool()[0],
         protocolPool: pdaProtocolPool()[0],
         storeMint: STORE_MINT,
@@ -456,8 +458,8 @@ export class CrankApi {
   // ─── §5.6b monetization (dark path) ─────────────────────────────────────────
 
   /**
-   * SELL one mining position (`owner`) into the buyer books (ST first up to its
-   * cap, then PP above its I10 reserve). Paged; signer is the keeper.
+   * SELL one mining position (`owner`) through ST first, PP second, and the
+   * attributed claim residual. Paged; signer is the keeper.
    */
   async crankMonetizeSell(
     keeper: PublicKey,
@@ -488,6 +490,34 @@ export class CrankApi {
         keeper,
         tokenProgram: TOKEN_PROGRAM_ID,
       })
+      .instruction();
+  }
+
+  /**
+   * CLAIM_RESIDUAL: after all SELL pages, remove the attributed residual from
+   * the shared miner, reconcile its measured leg mix through LITE, and wrap the
+   * credited amount into monetize custody. `remainingAccounts` must be the
+   * canonical 18-account ORE claim/wrap set.
+   */
+  async crankMonetizeClaimResidual(
+    cranker: PublicKey,
+    windowId: bigint,
+    remainingAccounts: AccountMeta[] = [],
+  ): Promise<TransactionInstruction> {
+    return this.client.program.methods
+      .crankMonetizeClaimResidual()
+      .accountsPartial({
+        config: pdaConfig()[0],
+        window: pdaWindow(windowId)[0],
+        miningPool: pdaMiningPool()[0],
+        phantomMember: pdaPhantomMember()[0],
+        storeMint: STORE_MINT,
+        cranker,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+      })
+      .remainingAccounts(remainingAccounts)
       .instruction();
   }
 
@@ -534,7 +564,8 @@ export class CrankApi {
 
   /**
    * ABORT: `admin` becomes the swap counterparty (deposits `solIn`) for a cycle stuck
-   * post-SELL, pre-STAGE. Signer is the admin.
+   * post-SELL, pre-STAGE. Signer is the admin, and callers must prepend the standard
+   * fresh fee-holder cosign attestation over the returned instruction.
    */
   async crankMonetizeAbort(solIn: bigint, admin: PublicKey): Promise<TransactionInstruction> {
     const miningAuthority = pdaMiningAuthority()[0];
@@ -549,6 +580,7 @@ export class CrankApi {
         monetizeStoreAta: storeAta(miningAuthority),
         adminStoreAta: storeAta(admin),
         admin,
+        ixSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
         tokenProgram: TOKEN_PROGRAM_ID,
         systemProgram: SystemProgram.programId,
       })

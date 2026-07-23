@@ -37,7 +37,7 @@ await dp.events.off(id);
 Every builder returns a `Promise<TransactionInstruction>` — compose, sign, and send with your own wallet/relayer. The IDL embeds all PDA seeds, so PDAs are resolved for you; you pass only the signers, mints, and external ORE accounts.
 
 - **`dp.user`** — `depositMining`, `depositStore(poolId, …)`, `submitWithdraw(poolId, …)`, `submitPpExitNotice`, `submitPpExit`, `claimReferral`, `claimExternalFeeRebate`.
-- **`dp.crank`** — the cascade + keeper cranks: `crankFreeze`, `crankAdvancePhase`, `settleMiningDeposit` / `settleStakingDeposit` / `settleProtocolDeposit`, `measureMiningExit`, `payMiningExit`, `settleStakingExit`, `settlePpExit`, `crankCapRebalance`, `crankBatch`, `crankRemarkPhantom`, `crankCheckpoint`, `crankMine`, the monetize cranks (`crankMonetizeSell/Stage/Fold/Abort`), `distributeFees` / `distributeFeesStore`, `distributeReferrals`, `sweepReferralSurplus`, `fundMiningAuthority`, `closeMiningPosition`.
+- **`dp.crank`** — the cascade + keeper cranks: `crankFreeze`, `crankAdvancePhase`, `settleMiningDeposit` / `settleStakingDeposit` / `settleProtocolDeposit`, `measureMiningExit`, `payMiningExit`, `settleStakingExit`, `settlePpExit`, `crankCapRebalance`, `crankBatch`, `crankRemarkPhantom`, `crankCheckpoint`, `crankMine`, the monetize cranks (`crankMonetizeSell/ClaimResidual/Stage/Fold/Abort`), `distributeFees` / `distributeFeesStore`, `distributeReferrals`, `sweepReferralSurplus`, `fundMiningAuthority`, `closeMiningPosition`.
 - **`dp.admin`** — `initialize`, `setParam`, `setEmergency`, `setFeeSchedule`, `setFeePolicy`, `opsWithdraw`, `setFeeExempt` / `clearFeeExempt`, `topUpProtocolLiquidity`, `setKeeper`, `setSettlementAuthority`, `setAdminTransferConfirmer`, `proposeAdmin` / `confirmAdminTransfer` / `acceptAdmin` / `cancelAdminTransfer`, `addWhitelist` / `removeWhitelist`, `initReferral`.
 - **`dp.evac`** — `evacuateClaimAll`, `redeemEvacuated{Mining,Staking,Protocol}`, `sweepEvacCustody`.
 - **`dp.read`** — typed account fetchers (`config`, `miningPool`, `stakingPool`, `protocolPool`, `feeExemptEntry(wallet)`, `position(poolId, owner)`, `window(id)`, …) + `currentWindowId()` + `miningNav()`.
@@ -45,7 +45,7 @@ Every builder returns a `Promise<TransactionInstruction>` — compose, sign, and
 
 ## Cosigned instructions
 
-Admin config mutations (`setParam`, `setEmergency`, `setFeeSchedule`, `setKeeper`, `setSettlementAuthority`, `addWhitelist`, `removeWhitelist`, `initReferral`) and `evacuateClaimAll` / `sweepEvacCustody` require an Ed25519 fee-holder second factor. Build the cosign and prepend it in the **same** transaction:
+Admin config mutations (`setParam`, `setEmergency`, `setFeeSchedule`, `setKeeper`, `setSettlementAuthority`, `addWhitelist`, `removeWhitelist`, `initReferral`), `evacuateClaimAll` / `sweepEvacCustody`, and `crankMonetizeAbort` require an Ed25519 fee-holder second factor. ABORT is cosigned because the admin becomes the recovery counterparty and receives the full staged stORE custody. Build the cosign and prepend it in the **same** transaction:
 
 ```ts
 import { buildCosignEd25519Ix } from "@diamond/sdk";
@@ -76,9 +76,9 @@ try {
 }
 ```
 
-`DIAMOND_ERRORS` (code → {name, msg}) and `ERROR_CODE` (name → code) are exported for the full 88-code table.
+`DIAMOND_ERRORS` (code → {name, msg}) and `ERROR_CODE` (name → code) are exported for the full 92-code table.
 
-The SDK's build gate checks that all 55 ABI instructions have a builder. The pinned ABI currently exposes 14 accounts, 32 events, and 88 errors.
+The SDK's build gate checks that all 56 ABI instructions have a builder. The pinned ABI currently exposes 14 accounts, 33 events, and 92 errors.
 
 ## Versioning
 
