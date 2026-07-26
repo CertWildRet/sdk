@@ -21,6 +21,25 @@
 import { EventParser } from "@coral-xyz/anchor";
 import type { DiamondPoolsClient } from "./client";
 
+// ─── name casing: THE BUG THIS FILE USED TO HAVE ────────────────────────────
+//
+// Anchor 0.31's `BorshEventCoder` decodes an event's name to camelCase (`ppExitSettled`), NOT the
+// IDL's PascalCase. `EventManager` then dispatches with
+// `this._eventListeners.get(event.name)` — i.e. keyed on the CAMELCASE name.
+//
+// This file previously registered listeners under the PascalCase `EventName` and asserted in a
+// comment that "the runtime BorshEventCoder emits the IDL's PascalCase names". That was backwards,
+// and the consequence was silent: `on()` registered under a key dispatch never looks up, so **every
+// listener registered through this API never fired**. Nothing threw; handlers simply never ran.
+//
+// Verified empirically, not from docs: `contracts/tests/dp/34-failsoft-events.test.ts` decodes real
+// program logs through the same coder and gets `unclaimedRecorded` / `depositRefundUndeliverable`.
+//
+// The public API stays PascalCase — it mirrors the IDL and is what a reader expects — and the
+// casing is normalised at the two boundaries instead.
+const toCoderName = (n: string): string => n.charAt(0).toLowerCase() + n.slice(1);
+const toIdlName = (n: string): string => n.charAt(0).toUpperCase() + n.slice(1);
+
 /** Every event the diamond_pools program emits (mirrors the IDL `events` table). */
 export type EventName =
   | "AdminCosignEvent"
@@ -94,10 +113,9 @@ export class EventsApi {
    * signature. Returns a listener id — pass it to {@link off} to unsubscribe.
    */
   on(name: EventName, handler: EventHandler): number {
-    // NOTE: Anchor 0.31's `addEventListener` type camelCases event names, but the
-    // runtime `BorshEventCoder` emits — and this listener map matches on — the IDL's
-    // PascalCase names (what `decode()` returns as `event.name`). We keep the public
-    // API PascalCase (runtime-correct, matches the IDL) and bridge the type here.
+    // The public API is PascalCase (matches the IDL); the runtime is camelCase. See the casing
+    // note at the top of this file — getting this backwards is what made every listener silently
+    // never fire.
     // The cast is also what keeps this file COMPILING. Anchor's `addEventListener` signature
     // instantiates the same `IdlEvents<DiamondPools>` map that `types.ts` had to drop — at 48
     // events that exceeds TypeScript's depth limit (TS2589), and it fails only on a clean build,
@@ -106,7 +124,8 @@ export class EventsApi {
     const p = this.client.program as unknown as {
       addEventListener(name: string, handler: EventHandler): number;
     };
-    return p.addEventListener(name, handler);
+    // Register under the CAMELCASE name, because that is the key `EventManager` dispatches on.
+    return p.addEventListener(toCoderName(name), handler);
   }
 
   /** Unsubscribe a listener previously registered with {@link on}. */
@@ -122,7 +141,10 @@ export class EventsApi {
   parseLogs(logs: string[]): DecodedEvent[] {
     const out: DecodedEvent[] = [];
     for (const event of this.parser.parseLogs(logs)) {
-      out.push({ name: event.name, data: event.data });
+      // Back to PascalCase so a caller can compare against `EventName` and switch on the same
+      // strings they pass to `on()`. Returning the coder's camelCase here would mean the two halves
+      // of this API disagreed about what an event is called.
+      out.push({ name: toIdlName(event.name), data: event.data });
     }
     return out;
   }
