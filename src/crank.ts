@@ -356,6 +356,9 @@ export class CrankApi {
         window: pdaWindow(windowId)[0],
         stakingPool: pdaStakingPool()[0],
         protocolPool: pdaProtocolPool()[0],
+        // rev-11 F2: read-only, required. Lets the rail see what `measure_mining_exit` already
+        // sealed, so a staker exit DEFERS instead of spending a mining exiter's reserved slice.
+        miningPool: pdaMiningPool()[0],
         position: pdaPosition(POOL_STAKING, owner)[0],
         order: pdaOrder(windowId, owner, POOL_STAKING, ORDER_KIND_WITHDRAW)[0],
         storeMint: STORE_MINT,
