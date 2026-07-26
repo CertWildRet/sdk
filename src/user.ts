@@ -24,6 +24,7 @@ import {
   ORDER_KIND_DEPOSIT,
   ORDER_KIND_WITHDRAW,
   STORE_MINT,
+  ORE_MINT,
   PoolId,
 } from "./constants";
 import {
@@ -134,6 +135,12 @@ export class UserApi {
         // exiter can be charged their own ~0.00204 SOL of ATA rent instead of the keeper —
         // and it guarantees the account exists by settle time.
         ownerStoreAta: getAssociatedTokenAddressSync(STORE_MINT, owner, true),
+        // rev-11 F5: the ORE-delivery payout target, provisioned the same way and for the same
+        // reason. Nothing used to create it, so an absent ORE ATA — the NORMAL state for a SOL
+        // depositor who has never held ORE — forfeited the exiter's entire (u,r) annex to the PP
+        // book. Created on-chain only when the order is stamped for ORE delivery.
+        oreMint: ORE_MINT,
+        ownerOreAta: getAssociatedTokenAddressSync(ORE_MINT, owner, true),
         owner,
         systemProgram: SystemProgram.programId,
       })
