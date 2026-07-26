@@ -16,6 +16,10 @@ export const ORE_MINT = new PublicKey("oreoU2P8bN6jkk3jbaiVxYnG1dCXcYxwhwyK9jSyb
 export const ORE_LST_PROGRAM_ID = new PublicKey("storeD7bEkywTTMrje19WRoyrkEhbhrvyjVnLxWih6a");
 export const ORE_STAKE_PROGRAM_ID = new PublicKey("stakecNP3FpiExZPCgZfqRgumVzi6dNqnfrjwXyTgeH");
 export const STORE_MINT = new PublicKey("storenSbvkfzircixnaosc5CbzNZVrHJ6S3EKrS1yqR");
+export const WSOL_MINT = new PublicKey("So11111111111111111111111111111111111111112");
+/** Jupiter v6 — the approved SOL->ORE route for `crank_pp_convert_sol_to_ore`. The program pins
+ *  this address on-chain, so passing anything else aborts the CPI. */
+export const JUPITER_V6_PROGRAM_ID = new PublicKey("JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4");
 
 export const TOKEN_PROGRAM_ID = new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
 export const ASSOCIATED_TOKEN_PROGRAM_ID = new PublicKey("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL");

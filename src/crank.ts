@@ -23,6 +23,9 @@ import type { DiamondPoolsClient } from "./client";
 import {
   ORE_PROGRAM_ID,
   STORE_MINT,
+  ORE_MINT,
+  WSOL_MINT,
+  JUPITER_V6_PROGRAM_ID,
   TOKEN_PROGRAM_ID,
   ASSOCIATED_TOKEN_PROGRAM_ID,
   POOL_MINING,
@@ -43,6 +46,7 @@ import {
   pdaReferralTreasury,
   pdaMiningAuthority,
   pdaPhantomMember,
+  pdaUnclaimed,
   pdaWindow,
   pdaPosition,
   pdaOrder,
@@ -184,6 +188,17 @@ export class CrankApi {
   }
 
   /** §5.2 LITE: refine the phantom member + fold any pure surplus into the PP book. */
+  /**
+   * §5.2 LITE phantom re-mark, and — since rev-14 — the CONSERVATION OBSERVER.
+   *
+   * The observer added `stakingPool`, `unclaimed` and `oreMiner`: it sums the enumerable claims
+   * (ST book + PP book + unclaimed pot) against miner physical, emits `ConservationObserved`, and
+   * on a breach raises `defensive_mode` and advances a consecutive-window counter.
+   *
+   * ⚠ CALL THIS EVERY WINDOW. Unlike its D1 twin (`crank_cap_rebalance`, a mandatory cascade
+   * step), nothing forces this crank to run — no phase depends on it. If it is not called the
+   * counter never moves and the conservation gate never engages, however broken the books are.
+   */
   async crankRemarkPhantom(cranker: PublicKey): Promise<TransactionInstruction> {
     return this.client.program.methods
       .crankRemarkPhantom()
@@ -191,9 +206,74 @@ export class CrankApi {
         config: pdaConfig()[0],
         miningPool: pdaMiningPool()[0],
         protocolPool: pdaProtocolPool()[0],
+        stakingPool: pdaStakingPool()[0],
+        unclaimed: pdaUnclaimed()[0],
+        oreMiner: miningAuthorityMinerPda()[0],
         phantomMember: pdaPhantomMember()[0],
         cranker,
       })
+      .instruction();
+  }
+
+  /**
+   * PP SOL -> ORE, hop 1 of the convert rail. `swapData` and `remainingAccounts` come verbatim from
+   * Jupiter (`crank/src/convert.ts` `fetchConvertRoute`); the program validates the OUTCOME
+   * (measured deltas vs `minOreOut`), never the route.
+   */
+  async crankPpConvertSolToOre(
+    keeper: PublicKey,
+    lamports: bigint,
+    minOreOut: bigint,
+    swapData: Buffer,
+    remainingAccounts: AccountMeta[],
+  ): Promise<TransactionInstruction> {
+    const ppAuth = pdaVault(POOL_PROTOCOL)[0];
+    return this.client.program.methods
+      .crankPpConvertSolToOre(new BN(lamports.toString()), new BN(minOreOut.toString()), swapData)
+      .accountsPartial({
+        config: pdaConfig()[0],
+        protocolPool: pdaProtocolPool()[0],
+        protocolVaultAuthority: ppAuth,
+        ppWsolAta: getAssociatedTokenAddressSync(WSOL_MINT, ppAuth, true),
+        ppOreAta: getAssociatedTokenAddressSync(ORE_MINT, ppAuth, true),
+        wsolMint: WSOL_MINT,
+        oreMint: ORE_MINT,
+        swapProgram: JUPITER_V6_PROGRAM_ID,
+        keeper,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+      })
+      .remainingAccounts(remainingAccounts)
+      .instruction();
+  }
+
+  /**
+   * PP ORE -> stORE, hop 2 (the native storeD7 wrap). `remainingAccounts` is the 9-account frame
+   * from `crank/src/convert.ts` `wrapFrameAccounts()` — exactly 9; the program binds ra[0]..ra[8].
+   */
+  async crankPpWrapOreToStore(
+    keeper: PublicKey,
+    amountOre: bigint,
+    remainingAccounts: AccountMeta[],
+  ): Promise<TransactionInstruction> {
+    const ppAuth = pdaVault(POOL_PROTOCOL)[0];
+    return this.client.program.methods
+      .crankPpWrapOreToStore(new BN(amountOre.toString()))
+      .accountsPartial({
+        config: pdaConfig()[0],
+        protocolPool: pdaProtocolPool()[0],
+        protocolVaultAuthority: ppAuth,
+        ppOreAta: getAssociatedTokenAddressSync(ORE_MINT, ppAuth, true),
+        protocolVaultAta: storeAta(ppAuth),
+        oreMint: ORE_MINT,
+        storeMint: STORE_MINT,
+        keeper,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+      })
+      .remainingAccounts(remainingAccounts)
       .instruction();
   }
 

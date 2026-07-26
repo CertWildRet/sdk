@@ -81,6 +81,17 @@ export type EventName =
   | "StakingExitSettled"
   | "WindowClosed"
   | "WindowFrozen"
+  | "ConservationGateArmed"
+  | "ConservationObserved"
+  | "ExitDeferredReservedLiquidity"
+  | "PpOreWrapped"
+  | "PpSolConverted"
+  | "UnclaimedClawedBack"
+  | "UnclaimedOreClawedBack"
+  | "UnclaimedOreRecorded"
+  | "UnclaimedOreRestored"
+  | "UnclaimedPaidOut"
+  | "UnclaimedRecorded"
   | "WindowPhaseAdvanced";
 
 /** A single decoded event, as returned by {@link EventsApi.parseLogs}. */

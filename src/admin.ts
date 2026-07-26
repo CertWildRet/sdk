@@ -32,6 +32,7 @@ import {
   POOL_MINING,
   POOL_PROTOCOL,
   type FeeAsset,
+  type PoolId,
 } from "./constants";
 import {
   pdaConfig,
@@ -49,6 +50,8 @@ import {
   pdaFeeBucket,
   pdaFeeExempt,
   pdaPosition,
+  pdaUnclaimed,
+  pdaUnclaimedCustody,
 } from "./pdas";
 import type { DiamondPoolsClient } from "./client";
 
@@ -432,4 +435,106 @@ export class AdminApi {
       })
       .instruction();
   }
+  // ─── the unclaimed pot's exit side (rev-13 policy; all four are cosigned) ───
+
+  /**
+   * Hatch 1 — pay a verified beneficiary out of the segregated pot. `asset`: 1 = stORE.
+   * Verification is OFF-CHAIN, reconstructed from `UnclaimedRecorded` events; the pot holds
+   * totals only. Cosigned.
+   */
+  async claimUnclaimed(
+    admin: PublicKey,
+    claimant: PublicKey,
+    asset: number,
+    amount: bigint,
+  ): Promise<TransactionInstruction> {
+    const custody = pdaUnclaimedCustody()[0];
+    return this.client.program.methods
+      .claimUnclaimed(asset, new BN(amount.toString()))
+      .accountsPartial({
+        config: pdaConfig()[0],
+        unclaimed: pdaUnclaimed()[0],
+        unclaimedCustodyAuthority: custody,
+        unclaimedCustodyAta: getAssociatedTokenAddressSync(STORE_MINT, custody, true),
+        storeMint: STORE_MINT,
+        claimant,
+        claimantStoreAta: getAssociatedTokenAddressSync(STORE_MINT, claimant, true),
+        admin,
+        ixSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
+      })
+      .instruction();
+  }
+
+  /** Hatch 2 — redistribute pot stORE into a pool, lifting every holder's backing. Cosigned. */
+  async sweepUnclaimedToPool(
+    admin: PublicKey,
+    poolId: PoolId,
+    amount: bigint,
+  ): Promise<TransactionInstruction> {
+    const custody = pdaUnclaimedCustody()[0];
+    const destAuth = pdaVault(poolId)[0];
+    return this.client.program.methods
+      .sweepUnclaimedToPool(poolId, new BN(amount.toString()))
+      .accountsPartial({
+        config: pdaConfig()[0],
+        unclaimed: pdaUnclaimed()[0],
+        unclaimedCustodyAuthority: custody,
+        unclaimedCustodyAta: getAssociatedTokenAddressSync(STORE_MINT, custody, true),
+        storeMint: STORE_MINT,
+        stakingPool: pdaStakingPool()[0],
+        protocolPool: pdaProtocolPool()[0],
+        destVaultAuthority: destAuth,
+        destVaultAta: getAssociatedTokenAddressSync(STORE_MINT, destAuth, true),
+        admin,
+        ixSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
+      })
+      .instruction();
+  }
+
+  /**
+   * Hatch 1 for the ORE leg — restore a book annex to the beneficiary's own Position.
+   * No pool id: the rail's seeds hardcode POOL_MINING, because an ORE annex can only ever arise
+   * from a mining exit. Cosigned.
+   */
+  async restoreUnclaimedOre(
+    admin: PublicKey,
+    claimant: PublicKey,
+    uAmount: bigint,
+    rAmount: bigint,
+  ): Promise<TransactionInstruction> {
+    return this.client.program.methods
+      .restoreUnclaimedOre(new BN(uAmount.toString()), new BN(rAmount.toString()))
+      .accountsPartial({
+        config: pdaConfig()[0],
+        unclaimed: pdaUnclaimed()[0],
+        miningPool: pdaMiningPool()[0],
+        position: pdaPosition(POOL_MINING, claimant)[0],
+        claimant,
+        admin,
+        ixSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
+      })
+      .instruction();
+  }
+
+  /** Hatch 2 for the ORE leg — fold a pot annex into a pool book (rolls the book first). Cosigned. */
+  async sweepUnclaimedOreToPool(
+    admin: PublicKey,
+    poolId: PoolId,
+    uAmount: bigint,
+    rAmount: bigint,
+  ): Promise<TransactionInstruction> {
+    return this.client.program.methods
+      .sweepUnclaimedOreToPool(poolId, new BN(uAmount.toString()), new BN(rAmount.toString()))
+      .accountsPartial({
+        config: pdaConfig()[0],
+        miningPool: pdaMiningPool()[0],
+        unclaimed: pdaUnclaimed()[0],
+        stakingPool: pdaStakingPool()[0],
+        protocolPool: pdaProtocolPool()[0],
+        admin,
+        ixSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
+      })
+      .instruction();
+  }
+
 }

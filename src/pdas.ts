@@ -26,6 +26,9 @@ export const pdaMiningAuthority = () => pda([SEED.miningAuthority]);
 export const pdaPhantomMember = () => pda([SEED.phantomMember]);
 export const pdaEvacCustody = () => pda([SEED.evacCustody]);
 export const pdaFeeBucket = () => pda([SEED.feeBucket]);
+/** rev-13 unclaimed pot: the segregated ledger, and the authority that owns its custody ATA. */
+export const pdaUnclaimed = () => pda([Buffer.from("unclaimed")]);
+export const pdaUnclaimedCustody = () => pda([Buffer.from("unclaimed-custody")]);
 
 // ─── parameterized PDAs ──────────────────────────────────────────────────────
 export const pdaWindow = (id: bigint | number) => pda([SEED.window, u64le(id)]);
