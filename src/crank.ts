@@ -160,19 +160,24 @@ export class CrankApi {
   }
 
   /**
-   * Reclaim a spent window's rent to the fee bucket. Only valid once the window is fully
-   * cascaded (WINDOW_PHASE_OPEN) and strictly older than `config.current_window_id`.
+   * Reclaim a spent window's rent, returning it to the key that FUNDED it at `crank_freeze`
+   * (never to the caller — that would make housekeeping a race prize). Only valid once the window
+   * is fully cascaded (WINDOW_PHASE_OPEN) and strictly older than `config.current_window_id`.
    *
    * Without this the per-window `init, payer = cranker` rent (~0.0024 SOL, ~20.7 SOL/yr at the
    * 1h cadence) is permanently unrecoverable — there is no other path out of a Window PDA.
    */
   async closeWindow(windowId: bigint, cranker: PublicKey): Promise<TransactionInstruction> {
+    const windowPda = pdaWindow(windowId)[0];
+    // The rent returns to whoever FUNDED this window at crank_freeze — not the closer, not the
+    // treasury — so the recipient has to be read off the window itself.
+    const w = await this.client.program.account.window.fetch(windowPda);
     return this.client.program.methods
       .closeWindow()
       .accountsPartial({
         config: pdaConfig()[0],
-        window: pdaWindow(windowId)[0],
-        feeBucket: pdaFeeBucket()[0],
+        window: windowPda,
+        rentPayer: (w as { rentPayer: PublicKey }).rentPayer,
         cranker,
       })
       .instruction();
