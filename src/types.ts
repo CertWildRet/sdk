@@ -24,7 +24,7 @@ export type DiamondAccounts = IdlAccounts<DiamondPools>;
 // If you need an event's shape, decode at runtime with the Anchor event coder (see `events.ts`) or
 // hand-write the handful of fields you consume. Do not reintroduce the map.
 
-// Account aliases (the 14 program accounts).
+// Account aliases (all 15 program accounts — `check-interface` now enforces completeness).
 export type Config = DiamondAccounts["config"];
 export type FeeExemptEntry = DiamondAccounts["feeExemptEntry"];
 export type FeeSchedule = DiamondAccounts["feeSchedule"];
@@ -37,5 +37,8 @@ export type ProtocolPool = DiamondAccounts["protocolPool"];
 export type ReferralConfig = DiamondAccounts["referralConfig"];
 export type ReferrerState = DiamondAccounts["referrerState"];
 export type StakingPool = DiamondAccounts["stakingPool"];
+/** rev-13 segregated unclaimed pot: totals only; the per-beneficiary picture is
+ *  reconstructed off-chain from `UnclaimedRecorded` / `UnclaimedOreRecorded`. */
+export type Unclaimed = DiamondAccounts["unclaimed"];
 export type WhitelistEntry = DiamondAccounts["whitelistEntry"];
 export type Window = DiamondAccounts["window"];
