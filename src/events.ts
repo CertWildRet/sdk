@@ -43,7 +43,6 @@ const toIdlName = (n: string): string => n.charAt(0).toUpperCase() + n.slice(1);
 /** Every event the diamond_pools program emits (mirrors the IDL `events` table). */
 export type EventName =
   | "AdminCosignEvent"
-  | "BatchCrystallized"
   | "CapOverflow"
   | "CapStressed"
   | "ConfigChanged"
@@ -53,7 +52,6 @@ export type EventName =
   | "EvacOrphanProtocolSolSwept"
   | "EvacOrphanProtocolStoreSwept"
   | "EvacRedeemed"
-  | "EvacStoreLegSkippedUnusableAta"
   | "EvacuationExecuted"
   | "ExitCancelledUnusableAta"
   | "ExitTokenLegForfeited"
@@ -81,7 +79,6 @@ export type EventName =
   | "ReferralClaimed"
   | "ReferralSwept"
   | "StakingExitSettled"
-  | "TreasuryAdvance"
   | "WindowClosed"
   | "WindowFrozen"
   | "WindowPhaseAdvanced";
