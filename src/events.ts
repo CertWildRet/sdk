@@ -1,7 +1,7 @@
 /**
  * EventsApi — live event subscription + offline log decoding for diamond_pools.
  *
- * The program emits 42 Anchor events (Borsh-encoded, base64, on the `Program data:`
+ * The program emits 43 Anchor events (Borsh-encoded, base64, on the `Program data:`
  * log line). This API is a thin, typed wrapper over Anchor's own event machinery:
  *   - `on` / `off` subscribe to a named event over the connection's `onLogs` firehose
  *     (delegates to `program.addEventListener` / `program.removeEventListener`).
@@ -37,6 +37,7 @@ export type EventName =
   | "EvacStoreLegSkippedUnusableAta"
   | "EvacuationExecuted"
   | "ExitCancelledUnusableAta"
+  | "ExitTokenLegForfeited"
   | "ExternalFeeRebateClaimed"
   | "FeeDistributed"
   | "FeeExemptCleared"
