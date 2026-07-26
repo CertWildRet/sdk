@@ -71,7 +71,8 @@ export type EventName =
 export interface DecodedEvent {
   /** The event name (one of {@link EventName}). */
   name: string;
-  /** The decoded, camelCased event fields (typed via `DiamondEvents[name]`). */
+  /** The decoded, camelCased event fields. Untyped by design — see the note in `types.ts`
+   *  on why the IDL event map cannot be instantiated at this size. */
   data: any;
 }
 
@@ -97,7 +98,15 @@ export class EventsApi {
     // runtime `BorshEventCoder` emits — and this listener map matches on — the IDL's
     // PascalCase names (what `decode()` returns as `event.name`). We keep the public
     // API PascalCase (runtime-correct, matches the IDL) and bridge the type here.
-    return this.client.program.addEventListener(name as never, handler);
+    // The cast is also what keeps this file COMPILING. Anchor's `addEventListener` signature
+    // instantiates the same `IdlEvents<DiamondPools>` map that `types.ts` had to drop — at 48
+    // events that exceeds TypeScript's depth limit (TS2589), and it fails only on a clean build,
+    // which is precisely what a consumer installing from git gets. Narrowing the method to its
+    // runtime shape stops TS expanding the map without changing behaviour.
+    const p = this.client.program as unknown as {
+      addEventListener(name: string, handler: EventHandler): number;
+    };
+    return p.addEventListener(name, handler);
   }
 
   /** Unsubscribe a listener previously registered with {@link on}. */
