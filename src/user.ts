@@ -128,6 +128,12 @@ export class UserApi {
         window: pdaWindow(wid)[0],
         position: pdaPosition(poolId, owner)[0],
         order: pdaOrder(wid, owner, poolId, ORDER_KIND_WITHDRAW)[0],
+        storeMint: STORE_MINT,
+        // Created here at the owner's own signature (payer = owner). Settlement is
+        // permissionless and the exiter does not sign it, so this is the only moment the
+        // exiter can be charged their own ~0.00204 SOL of ATA rent instead of the keeper —
+        // and it guarantees the account exists by settle time.
+        ownerStoreAta: getAssociatedTokenAddressSync(STORE_MINT, owner, true),
         owner,
         systemProgram: SystemProgram.programId,
       })
@@ -165,6 +171,10 @@ export class UserApi {
         protocolPool: pdaProtocolPool()[0],
         position: pdaPosition(POOL_PROTOCOL, owner)[0],
         order: pdaOrder(wid, owner, POOL_PROTOCOL, ORDER_KIND_WITHDRAW)[0],
+        storeMint: STORE_MINT,
+        // Created here at the owner's signature (payer = owner) so an aged notice is never
+        // burned by a settle-time cancel for want of a receiving account.
+        ownerStoreAta: getAssociatedTokenAddressSync(STORE_MINT, owner, true),
         owner,
         systemProgram: SystemProgram.programId,
       })

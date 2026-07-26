@@ -159,6 +159,25 @@ export class CrankApi {
       .instruction();
   }
 
+  /**
+   * Reclaim a spent window's rent to the fee bucket. Only valid once the window is fully
+   * cascaded (WINDOW_PHASE_OPEN) and strictly older than `config.current_window_id`.
+   *
+   * Without this the per-window `init, payer = cranker` rent (~0.0024 SOL, ~20.7 SOL/yr at the
+   * 1h cadence) is permanently unrecoverable — there is no other path out of a Window PDA.
+   */
+  async closeWindow(windowId: bigint, cranker: PublicKey): Promise<TransactionInstruction> {
+    return this.client.program.methods
+      .closeWindow()
+      .accountsPartial({
+        config: pdaConfig()[0],
+        window: pdaWindow(windowId)[0],
+        feeBucket: pdaFeeBucket()[0],
+        cranker,
+      })
+      .instruction();
+  }
+
   /** §5.2 LITE: refine the phantom member + fold any pure surplus into the PP book. */
   async crankRemarkPhantom(cranker: PublicKey): Promise<TransactionInstruction> {
     return this.client.program.methods
@@ -223,6 +242,9 @@ export class CrankApi {
         ppVaultAta: storeAta(ppAuth),
         feeStoreAta: storeAta(feeBucket),
         owner,
+        // No longer IDL-derivable: this became an UncheckedAccount when the rev-6 ATA-hijack
+        // fail-soft moved its resolution into the handler, so it must be passed explicitly.
+        ownerStoreAta: storeAta(owner),
         cranker,
       })
       .instruction();
