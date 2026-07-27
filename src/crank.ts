@@ -42,6 +42,7 @@ import {
   pdaProtocolPool,
   pdaFeeSchedule,
   pdaFeeBucket,
+  pdaFeeExempt,
   pdaReferralConfig,
   pdaReferralTreasury,
   pdaMiningAuthority,
@@ -151,7 +152,6 @@ export class CrankApi {
       .instruction();
   }
 
-  /** BATCH → OPEN: finalize the window's batched mining bookkeeping. */
   /**
    * The WEEKLY PERFORMANCE PASS, one mining position per call. Permissionless.
    *
@@ -164,6 +164,10 @@ export class CrankApi {
    *
    * The cascade does NOT wait for this: `crank_batch` closes the window whether or not the pass
    * finished. Do not gate the batch on it.
+   *
+   * `fee_exempt_entry` is the owner's exemption PDA and is passed unconditionally — most holders
+   * have no such account, and the handler treats an absent one as "no exemption". A wallet
+   * carrying `FEE_EXEMPT_SCOPE_PERF_FEE` is skipped without ratcheting its watermark.
    */
   async crankPerfCharge(
     owner: PublicKey,
@@ -182,12 +186,14 @@ export class CrankApi {
         miningVault: pdaVault(POOL_MINING)[0],
         protocolVaultAuthority: pdaVault(POOL_PROTOCOL)[0],
         feeBucket: pdaFeeBucket()[0],
+        feeExemptEntry: pdaFeeExempt(owner)[0],
         cranker,
         systemProgram: SystemProgram.programId,
       })
       .instruction();
   }
 
+  /** BATCH → OPEN: finalize the window's batched mining bookkeeping. */
   async crankBatch(windowId: bigint, cranker: PublicKey): Promise<TransactionInstruction> {
     return this.client.program.methods
       .crankBatch()
