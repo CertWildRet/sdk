@@ -92,6 +92,15 @@ export type EventName =
   | "UnclaimedOreRestored"
   | "UnclaimedPaidOut"
   | "UnclaimedRecorded"
+  // ─── fee surface rev 4 ───
+  /** A performance charge landed. `stream` separates the exit trigger (0) from the weekly pass (1). */
+  | "PerfFeeCharged"
+  /** A weekly pass opened: `k` and the mark are sealed for every page of that cycle. */
+  | "PerfPassOpened"
+  /** The pass could not collect from a position — all-or-nothing, no ratchet, merges next cycle. */
+  | "PerfPositionSkipped"
+  /** The 50 bps staking-pool exit fee, stORE-denominated. */
+  | "StakingExitFeeCharged"
   | "WindowPhaseAdvanced";
 
 /** A single decoded event, as returned by {@link EventsApi.parseLogs}. */

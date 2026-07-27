@@ -152,6 +152,42 @@ export class CrankApi {
   }
 
   /** BATCH → OPEN: finalize the window's batched mining bookkeeping. */
+  /**
+   * The WEEKLY PERFORMANCE PASS, one mining position per call. Permissionless.
+   *
+   * Valid only while `windowId` sits in BATCH. The first call of a due cycle SEALS `k` and the
+   * mark into the mining pool; every later page prices against that seal, so pages may be
+   * submitted in any order and repeated safely — a position already charged this cycle is a
+   * no-op, not an error. A position the pass cannot fully collect from (bankroll floor, min
+   * liquidity, or shares locked by a sealed exit) is SKIPPED with a `PerfPositionSkipped` event
+   * and merges into the next cycle; the caller must not treat that as a failure.
+   *
+   * The cascade does NOT wait for this: `crank_batch` closes the window whether or not the pass
+   * finished. Do not gate the batch on it.
+   */
+  async crankPerfCharge(
+    owner: PublicKey,
+    windowId: bigint,
+    cranker: PublicKey,
+  ): Promise<TransactionInstruction> {
+    return this.client.program.methods
+      .crankPerfCharge()
+      .accountsPartial({
+        config: pdaConfig()[0],
+        window: pdaWindow(windowId)[0],
+        feeSchedule: pdaFeeSchedule()[0],
+        miningPool: pdaMiningPool()[0],
+        protocolPool: pdaProtocolPool()[0],
+        position: pdaPosition(POOL_MINING, owner)[0],
+        miningVault: pdaVault(POOL_MINING)[0],
+        protocolVaultAuthority: pdaVault(POOL_PROTOCOL)[0],
+        feeBucket: pdaFeeBucket()[0],
+        cranker,
+        systemProgram: SystemProgram.programId,
+      })
+      .instruction();
+  }
+
   async crankBatch(windowId: bigint, cranker: PublicKey): Promise<TransactionInstruction> {
     return this.client.program.methods
       .crankBatch()
