@@ -1,6 +1,6 @@
 {
   "name": "@diamond/sdk",
-  "version": "1.3.1",
+  "version": "1.4.0",
   "description": "TypeScript SDK for Diamond Pools — a non-custodial three-pool ORE vault on Solana (Mining / Staking / Protocol). Wraps @diamond/abi's IDL with typed instruction builders, PDA derivation, account/event decoding, error mapping, and off-chain NAV previews.",
   "license": "MIT",
   "main": "dist/index.js",
@@ -18,7 +18,7 @@
   },
   "dependencies": {
     "@coral-xyz/anchor": "^0.31.1",
-    "@diamond/abi": "github:CertWildRet/abi#2aa1e76",
+    "@diamond/abi": "github:CertWildRet/abi#929cea7",
     "@solana/spl-token": "^0.4.14",
     "@solana/web3.js": "^1.95.0",
     "bn.js": "^5.2.3"
