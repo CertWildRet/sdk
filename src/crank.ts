@@ -580,6 +580,7 @@ export class CrankApi {
         oreConfig: oreConfigPda(),
         oreMiner: miningAuthorityMinerPda()[0],
         oreRound: oreRoundPda(roundId),
+        oreTreasury: oreTreasuryPda()[0],
         oreProgram: ORE_PROGRAM_ID,
         entropyVar,
         entropyProgram,
