@@ -84,6 +84,17 @@ const oreRoundPda = (roundId: bigint | number): PublicKey =>
 export const ORE_ENTROPY_VAR = new PublicKey("BWCaDY96Xe4WkFq1M7UiCCRcChsJ3p51L5KrGzhxgm2E");
 export const ORE_ENTROPY_PROGRAM = new PublicKey("3jSkUuYBoJzQPMEzTvkDFXCZUBksPamrVhrnHR9igu2X");
 
+/** The monetize/exit/evacuate compositions CPI into the storeD7 wrap, which MINTS stORE — the
+ * mint must be WRITABLE in the outer tx. The on-chain account structs omitted `mut` on
+ * `store_mint` (a declaration omission, not a security boundary: mint authority lives in
+ * storeD7), so IDL-driven metas come out read-only and the CPI dies on privilege escalation.
+ * Until the batched program upgrade adds the `mut`, grant writability here — the runtime
+ * permits extra writability and the inner wrap instruction already declares it. */
+function forceStoreMintWritable(ix: TransactionInstruction): TransactionInstruction {
+  for (const key of ix.keys) if (key.pubkey.equals(STORE_MINT)) key.isWritable = true;
+  return ix;
+}
+
 export class CrankApi {
   constructor(private readonly client: DiamondPoolsClient) {}
 
@@ -622,7 +633,7 @@ export class CrankApi {
     const stAuth = pdaVault(POOL_STAKING)[0];
     const ppAuth = pdaVault(POOL_PROTOCOL)[0];
     const miningAuthority = pdaMiningAuthority()[0];
-    return this.client.program.methods
+    return forceStoreMintWritable(await this.client.program.methods
       .crankMonetizeSell()
       .accountsPartial({
         config: pdaConfig()[0],
@@ -643,7 +654,7 @@ export class CrankApi {
         keeper,
         tokenProgram: TOKEN_PROGRAM_ID,
       })
-      .instruction();
+      .instruction());
   }
 
   /**
@@ -657,7 +668,7 @@ export class CrankApi {
     windowId: bigint,
     remainingAccounts: AccountMeta[] = [],
   ): Promise<TransactionInstruction> {
-    return this.client.program.methods
+    return forceStoreMintWritable(await this.client.program.methods
       .crankMonetizeClaimResidual()
       .accountsPartial({
         config: pdaConfig()[0],
@@ -671,7 +682,7 @@ export class CrankApi {
         systemProgram: SystemProgram.programId,
       })
       .remainingAccounts(remainingAccounts)
-      .instruction();
+      .instruction());
   }
 
   /**
@@ -680,7 +691,7 @@ export class CrankApi {
    */
   async crankMonetizeStage(keeper: PublicKey, solIn: bigint): Promise<TransactionInstruction> {
     const miningAuthority = pdaMiningAuthority()[0];
-    return this.client.program.methods
+    return forceStoreMintWritable(await this.client.program.methods
       .crankMonetizeStage(bn(solIn))
       .accountsPartial({
         config: pdaConfig()[0],
@@ -694,7 +705,7 @@ export class CrankApi {
         tokenProgram: TOKEN_PROGRAM_ID,
         systemProgram: SystemProgram.programId,
       })
-      .instruction();
+      .instruction());
   }
 
   /** FOLD one monetizing position (`owner`): mint shares at the settled frozen NAV. */
@@ -722,7 +733,7 @@ export class CrankApi {
    */
   async crankMonetizeAbort(solIn: bigint, admin: PublicKey): Promise<TransactionInstruction> {
     const miningAuthority = pdaMiningAuthority()[0];
-    return this.client.program.methods
+    return forceStoreMintWritable(await this.client.program.methods
       .crankMonetizeAbort(bn(solIn))
       .accountsPartial({
         config: pdaConfig()[0],
@@ -737,7 +748,7 @@ export class CrankApi {
         tokenProgram: TOKEN_PROGRAM_ID,
         systemProgram: SystemProgram.programId,
       })
-      .instruction();
+      .instruction());
   }
 
   // ─── protocol-fee distribution ──────────────────────────────────────────────
