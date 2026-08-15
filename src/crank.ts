@@ -91,7 +91,16 @@ export const ORE_ENTROPY_PROGRAM = new PublicKey("3jSkUuYBoJzQPMEzTvkDFXCZUBksPa
  * Until the batched program upgrade adds the `mut`, grant writability here — the runtime
  * permits extra writability and the inner wrap instruction already declares it. */
 function forceStoreMintWritable(ix: TransactionInstruction): TransactionInstruction {
-  for (const key of ix.keys) if (key.pubkey.equals(STORE_MINT)) key.isWritable = true;
+  return forceWritable(ix, STORE_MINT);
+}
+
+/** Same interim posture as `forceStoreMintWritable`, generalized: the PpWrap context also omits
+ * `mut` on `protocol_vault_authority` and `ore_mint`, and the storeD7 wrap CPI needs both
+ * writable (discovered by iterative mainnet simulation, 16 Aug: flipping exactly {pp vault
+ * authority, ORE mint} takes the ix from PrivilegeEscalation to success). All three `mut`s ride
+ * the same batched program upgrade; until then the builders grant writability here. */
+function forceWritable(ix: TransactionInstruction, ...pubkeys: PublicKey[]): TransactionInstruction {
+  for (const key of ix.keys) if (pubkeys.some((p) => key.pubkey.equals(p))) key.isWritable = true;
   return ix;
 }
 
@@ -311,12 +320,13 @@ export class CrankApi {
     remainingAccounts: AccountMeta[],
   ): Promise<TransactionInstruction> {
     const ppAuth = pdaVault(POOL_PROTOCOL)[0];
-    // Same store_mint `mut` omission as the five monetize contexts (interim fix batched for the
-    // next contract upgrade): the wrap's downstream mint CPI needs the mint writable, the anchor
-    // context declares it read-only, and the runtime rejects the escalation. Observed live 16 Aug
-    // ("6gvU…5Wom's writable privilege escalated" on CrankPpWrapOreToStore) blocking the PP
-    // fee-SOL drain, which in turn blocks PP deposits. Same one-pubkey grant, same scope.
-    return forceStoreMintWritable(await this.client.program.methods
+    // The PpWrap context omits `mut` on THREE accounts its storeD7 CPI chain mutates:
+    // store_mint (as in the five monetize contexts), protocol_vault_authority (6gvU… — the
+    // account in the live escalation logs), and ore_mint. Proven by iterative mainnet
+    // simulation (16 Aug): flipping exactly {ppAuth, ORE mint} on top of the store-mint grant
+    // takes the ix from PrivilegeEscalation to success (411,944 CU). All three `mut`s ride the
+    // batched program upgrade; until then the builder grants writability.
+    return forceWritable(await this.client.program.methods
       .crankPpWrapOreToStore(new BN(amountOre.toString()))
       .accountsPartial({
         config: pdaConfig()[0],
@@ -332,7 +342,7 @@ export class CrankApi {
         systemProgram: SystemProgram.programId,
       })
       .remainingAccounts(remainingAccounts)
-      .instruction());
+      .instruction(), STORE_MINT, ppAuth, ORE_MINT);
   }
 
   // ─── deposit settlement ─────────────────────────────────────────────────────
