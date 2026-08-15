@@ -311,7 +311,12 @@ export class CrankApi {
     remainingAccounts: AccountMeta[],
   ): Promise<TransactionInstruction> {
     const ppAuth = pdaVault(POOL_PROTOCOL)[0];
-    return this.client.program.methods
+    // Same store_mint `mut` omission as the five monetize contexts (interim fix batched for the
+    // next contract upgrade): the wrap's downstream mint CPI needs the mint writable, the anchor
+    // context declares it read-only, and the runtime rejects the escalation. Observed live 16 Aug
+    // ("6gvU…5Wom's writable privilege escalated" on CrankPpWrapOreToStore) blocking the PP
+    // fee-SOL drain, which in turn blocks PP deposits. Same one-pubkey grant, same scope.
+    return forceStoreMintWritable(await this.client.program.methods
       .crankPpWrapOreToStore(new BN(amountOre.toString()))
       .accountsPartial({
         config: pdaConfig()[0],
@@ -327,7 +332,7 @@ export class CrankApi {
         systemProgram: SystemProgram.programId,
       })
       .remainingAccounts(remainingAccounts)
-      .instruction();
+      .instruction());
   }
 
   // ─── deposit settlement ─────────────────────────────────────────────────────
