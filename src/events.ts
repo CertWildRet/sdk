@@ -72,6 +72,10 @@ export type EventName =
   | "OrderSubmitted"
   | "PhantomDustCeilingBreached"
   | "PhantomRemarked"
+  // ─── w3 increment (beta-week3) ───
+  | "AccountSpaceMigrated"
+  | "HarvestDustQuarantined"
+  | "MonetizeDustSkipped"
   | "PoolsInitialized"
   | "PpExitNoticeSubmitted"
   | "PpExitSettled"
