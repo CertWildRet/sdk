@@ -106,6 +106,25 @@ export class AdminApi {
   }
 
   /**
+   * w3 layout migration: realloc Config (+1) and MiningPool (+40) to the grown INIT_SPACE and
+   * zero-fill the appended tail. MUST run immediately after the w3 program deploy — until it
+   * does, every instruction touching either account fails Borsh deserialization by design.
+   * Idempotent; admin pays the rent delta; admin key checked against raw bytes (the account
+   * cannot deserialize pre-migration, so the gate reads the layout-stable head offset).
+   */
+  async migrateAccountSpace(admin: PublicKey): Promise<TransactionInstruction> {
+    return this.client.program.methods
+      .migrateAccountSpace()
+      .accountsPartial({
+        config: pdaConfig()[0],
+        miningPool: pdaMiningPool()[0],
+        admin,
+        systemProgram: SystemProgram.programId,
+      })
+      .instruction();
+  }
+
+  /**
    * Set a scalar Config parameter (`field` selector → `value`).
    * Cosigned — bundle buildCosignEd25519Ix({cosigner, ix, nonce, signedTs}) BEFORE this ix in the same tx.
    */
