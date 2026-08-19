@@ -346,6 +346,8 @@ export class CrankApi {
         order: pdaOrder(windowId, owner, POOL_MINING, ORDER_KIND_DEPOSIT)[0],
         miningVault: pdaVault(POOL_MINING)[0],
         feeBucket: pdaFeeBucket()[0],
+        // Same reason as crank_monetize_fold: seeded on `order.owner`, and `owner` is an argument.
+        feeExemptEntry: pdaFeeExempt(owner)[0],
         owner,
         cranker,
       })
@@ -462,6 +464,9 @@ export class CrankApi {
         stakingVaultAta: storeAta(stAuth),
         protocolVaultAuthority: ppAuth,
         protocolVaultAta: storeAta(ppAuth),
+        // Seeded on `order.owner`. This is the instruction that PAYS a mining exit — cases 7 and 9
+        // both settle through it — so a build-time resolution failure here strands a live exit.
+        feeExemptEntry: pdaFeeExempt(owner)[0],
         exiter: owner,
         exiterStoreAta: storeAta(owner),
         cranker,
@@ -719,6 +724,13 @@ export class CrankApi {
         window: pdaWindow(windowId)[0],
         miningPool: pdaMiningPool()[0],
         position: pdaPosition(POOL_MINING, owner)[0],
+        // Supplied, never resolved. `fee_exempt_entry` is seeded on `position.owner`, so leaving it
+        // out makes Anchor FETCH the position account at build time just to read a pubkey we were
+        // handed as an argument. That fetch is a live failure mode: under RPC pressure it surfaces
+        // as "Reached maximum depth for account resolution. Unresolved accounts: `feeExemptEntry`"
+        // — not a retryable RPC error — and the FOLD is what clears `monetize_registered`, so a
+        // failed build re-pins crank_mine for a whole window. Observed 6× on 20 Aug.
+        feeExemptEntry: pdaFeeExempt(owner)[0],
         cranker,
       })
       .instruction();
