@@ -18,7 +18,7 @@
   },
   "dependencies": {
     "@coral-xyz/anchor": "^0.31.1",
-    "@diamond/abi": "github:CertWildRet/abi#81c3246",
+    "@diamond/abi": "github:CertWildRet/abi#4cbddcb",
     "@solana/spl-token": "^0.4.14",
     "@solana/web3.js": "^1.95.0",
     "bn.js": "^5.2.3"
