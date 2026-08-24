@@ -669,10 +669,15 @@ export class CrankApi {
   async crankMonetizeClaimResidual(
     cranker: PublicKey,
     windowId: bigint,
+    // F34 (genesis-2): bounds the physical claim in ORE grams so the STAGE front stays
+    // affordable. u64::MAX = uncapped (byte-identical law). REQUIRED on purpose — the
+    // pin bump must force every keeper call site to size it (A1) rather than inherit
+    // a silent default.
+    executorCapGrams: bigint,
     remainingAccounts: AccountMeta[] = [],
   ): Promise<TransactionInstruction> {
     return await this.client.program.methods
-      .crankMonetizeClaimResidual()
+      .crankMonetizeClaimResidual(new BN(executorCapGrams.toString()))
       .accountsPartial({
         config: pdaConfig()[0],
         window: pdaWindow(windowId)[0],
