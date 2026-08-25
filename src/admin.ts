@@ -52,6 +52,7 @@ import {
   pdaPosition,
   pdaUnclaimed,
   pdaUnclaimedCustody,
+  miningAuthorityMinerPda,
 } from "./pdas";
 import type { DiamondPoolsClient } from "./client";
 
@@ -550,6 +551,48 @@ export class AdminApi {
         unclaimed: pdaUnclaimed()[0],
         stakingPool: pdaStakingPool()[0],
         protocolPool: pdaProtocolPool()[0],
+        admin,
+        ixSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
+      })
+      .instruction();
+  }
+
+  /**
+   * C1 — re-anchor the LITE phantom to `physical − books` at a fully drained state. Cosigned.
+   *
+   * THE ONLY CLEARING PATH THAT EXISTS. `crank_remark_phantom` folds a PURE surplus only
+   * (`!u_is_debit && !r_is_debit`) and the live phantom is mixed-sign, so it refuses; and
+   * `initialize` cannot run a second time (constant, non-campaign-scoped seeds, hard `init`, no
+   * close path for any singleton). Without this, a campaign inherits its predecessor's phantom
+   * permanently — which on 26 Aug 2026 meant 95.6% of `phantom_dust_ceiling_grams` with no way
+   * down, and crossing that ceiling trips protocol-wide `defensive_mode`.
+   *
+   * ⛔ IT WILL REFUSE UNLESS EVERY POOL IS DRAINED, AND THAT IS THE ARITHMETIC, NOT CAUTION.
+   * The identity is `physical = Σ(live positions) + books + signed_phantom`, and
+   * `Σ(live positions)` is NOT enumerable on chain — so writing `physical − books` ASSERTS that
+   * term is zero. Four gates, each with its own error:
+   *   · not evacuated                                  → `AlreadyEvacuated`
+   *   · all three pools `total_shares <= 1_000`        → `PhantomClearNotDrained`   (6105)
+   *   · `mining_position_count == 0`                   → `PhantomClearPositionsLive` (6106)
+   *   · `factor_mirror >= phantom.factor_checkpoint`   → `PhantomClearFactorRegressed` (6107)
+   * The third is not redundant with the second: `Position` carries `uore_base`/`rore_stock`
+   * INDEPENDENTLY of `shares`, so a position can sit at zero shares with a live ORE annex that
+   * `total_shares` cannot see. Reap every position before calling.
+   *
+   * Absorbing a provable over-claim latches `defensive_mode` MANUAL-class AND increments
+   * `conservation_breach_windows` — read `PhantomReanchored` to see which happened.
+   */
+  async clearPhantomAtBoundary(admin: PublicKey): Promise<TransactionInstruction> {
+    return this.client.program.methods
+      .clearPhantomAtBoundary()
+      .accountsPartial({
+        config: pdaConfig()[0],
+        miningPool: pdaMiningPool()[0],
+        stakingPool: pdaStakingPool()[0],
+        protocolPool: pdaProtocolPool()[0],
+        unclaimed: pdaUnclaimed()[0],
+        oreMiner: miningAuthorityMinerPda()[0],
+        phantomMember: pdaPhantomMember()[0],
         admin,
         ixSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
       })

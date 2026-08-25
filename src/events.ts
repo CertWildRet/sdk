@@ -105,7 +105,28 @@ export type EventName =
   | "PerfPositionSkipped"
   /** The 50 bps staking-pool exit fee, stORE-denominated. */
   | "StakingExitFeeCharged"
-  | "WindowPhaseAdvanced";
+  | "WindowPhaseAdvanced"
+  // ─── genesis-2 increment ───
+  /**
+   * C1 — the LITE phantom was re-anchored to `physical − books` at a drained state.
+   *
+   * DELIBERATELY WIDE, and the width is the point: the write makes the conservation residual zero
+   * BY CONSTRUCTION, so this event is the ONLY surviving evidence of what the books actually said
+   * at the moment of the re-anchor. `absorbedOverClaim` is the field to read first — true means the
+   * clear absorbed a provable over-claim and latched `defensiveMode` MANUAL-class, false means it
+   * tidied pool-favour dust and escalated nothing.
+   */
+  | "PhantomReanchored"
+  /**
+   * C2 — the mining-exit fee, charged on the SOL leg at `pay_mining_exit`.
+   *
+   * `clamped` is the field that matters operationally: the fee is bounded by
+   * `sol_out − perf_fee`, and that bound genuinely binds (`perf_fee` can equal `sol_out`), so a
+   * short charge is the underflow guard doing its job rather than a misconfigured rate. Emitted
+   * even when the fee lands at zero after clamping — "the rate was live and took nothing" is the
+   * reading that is hardest to infer from anything else.
+   */
+  | "MiningExitFeeCharged";
 
 /** A single decoded event, as returned by {@link EventsApi.parseLogs}. */
 export interface DecodedEvent {

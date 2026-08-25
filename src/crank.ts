@@ -57,6 +57,7 @@ import {
   oreTreasuryPda,
   oreStakeStakePda,
   miningAuthorityMinerPda,
+  pdaUnclaimedCustody,
 } from "./pdas";
 
 const bn = (n: bigint | number) => new BN(n.toString());
@@ -469,6 +470,15 @@ export class CrankApi {
         feeExemptEntry: pdaFeeExempt(owner)[0],
         exiter: owner,
         exiterStoreAta: storeAta(owner),
+        // ⛔ F47 — MUST BE PASSED EXPLICITLY as of abi 1.8.0, and omitting it throws at BUILD time
+        // (`Account 'unclaimedCustodyAta' not provided`), not on chain.
+        // `unclaimed_custody_ata` became an `UncheckedAccount` in the program because
+        // `PayMiningExit`'s account-validation frame sat at EXACTLY the 4096-byte SBF stack limit
+        // and a 2-byte `Config` append pushed it to 4104 — an AccessViolation during validation on
+        // the irrevocable MINING_EXITS phase. Losing the `associated_token::` constraint is what
+        // reclaimed the frame, and it is also what removed Anchor's ability to derive this for us.
+        // The ADDRESS is unchanged and still checked in the handler; only the derivation moved.
+        unclaimedCustodyAta: storeAta(pdaUnclaimedCustody()[0]),
         cranker,
       })
       .instruction();
