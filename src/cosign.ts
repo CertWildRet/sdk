@@ -30,6 +30,33 @@ export function hashInstruction(ix: TransactionInstruction): Buffer {
  *   const ix = await dp.admin.setParamIx(field, value);
  *   const ed = buildCosignEd25519Ix({ cosigner, ix, nonce, signedTs });
  *   await dp.connection.sendTransaction(new Transaction().add(ed, ix), [admin]);
+ *
+ * ⛔ THAT ONE-LINE SEND IS NOT A COMPLETE FLOW — RE-SIGN ON EXPIRY, DO NOT JUST RESEND.
+ *
+ * The program accepts the proof only while `signed_ts <= now + 5s` and `now <= signed_ts + 30s`
+ * (`COSIGN_MAX_AGE_SECS`, `COSIGN_MAX_FUTURE_SECS`). **That window is roughly 4x SHORTER than the
+ * transaction's own life:** a blockhash stays valid ~150 slots, which at the p99 slot interval
+ * measured on mainnet this week (813 ms) is ~122 s. So a transaction can be perfectly valid to the
+ * network and still be refused by this gate — under congestion, which is exactly when an admin
+ * action matters most.
+ *
+ * Resending the SAME bytes cannot fix it: `signed_ts` is inside the signed message. The retry must
+ * rebuild — re-read `admin_auth_nonce`, re-read the CHAIN clock, and construct a fresh ed25519 ix:
+ *
+ *   for (let attempt = 1; attempt <= 3; attempt++) {
+ *     const nonce = (await dp.read.config()).adminAuthNonce;   // a landed send consumed it
+ *     const signedTs = await chainNowSecs(connection);         // NOT Date.now() — chain clock
+ *     const ed = buildCosignEd25519Ix({ cosigner, ix, nonce, signedTs });
+ *     try { return await send(new Transaction().add(ed, ix), [admin]); }
+ *     catch (e) { if (attempt === 3 || !/CosignExpired|BadCosign|blockhash/i.test(String(e))) throw e; }
+ *   }
+ *
+ * Re-reading the NONCE each attempt is not optional either: if an earlier attempt actually landed
+ * while the client saw a timeout, the nonce has moved and a stale one fails `BadCosignNonce`.
+ *
+ * With this loop the 30 s bound is three independent re-signed attempts rather than one shot, which
+ * is why the constant is sound as built (results §3bg) — the mitigation lives in the CALLER, so a
+ * consumer that copies only the three lines above inherits the tight window and none of the escape.
  */
 export function buildCosignEd25519Ix(args: {
   cosigner: CosignSigner;
