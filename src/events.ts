@@ -126,7 +126,29 @@ export type EventName =
    * even when the fee lands at zero after clamping — "the rate was live and took nothing" is the
    * reading that is hardest to infer from anything else.
    */
-  | "MiningExitFeeCharged";
+  | "MiningExitFeeCharged"
+  /**
+   * The campaign re-init is ARMED — `set_emergency(EMERGENCY_END_OF_CAMPAIGN, true)`.
+   *
+   * A reviewable marker on chain BEFORE anything irreversible happens: at this point the decision
+   * is still withdrawable. Treat it as the operational trigger to run the carry-over census, since
+   * a `PpExitNotice` filed after the arm can never be cleared — its only closer is
+   * `submit_pp_exit`, which requires `!wind_down`.
+   */
+  | "EndOfCampaignArmed"
+  /**
+   * A campaign ENDED and the next one began, on the same program id — `reinit_for_campaign`.
+   *
+   * The two monotonic latches an evacuation arms (`evacuated`, `wind_down`) are now cleared, so
+   * the cascade and the intake rails are live again. It does NOT reopen the closed campaign: every
+   * `redeem_evacuated_*` and `sweep_evac_custody` requires `evacuated == true` and refuses from
+   * here on.
+   *
+   * The `prevEvac*` fields carry the CLOSED campaign's final evacuation snapshot, which the
+   * re-establishment resets moments later — read them here or lose them. `campaignVersion` is the
+   * new version; it advances by exactly one, so this event is the campaign boundary itself.
+   */
+  | "CampaignReinitialised";
 
 /** A single decoded event, as returned by {@link EventsApi.parseLogs}. */
 export interface DecodedEvent {
