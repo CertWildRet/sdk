@@ -117,6 +117,7 @@ export type EventName =
    * tidied pool-favour dust and escalated nothing.
    */
   | "PhantomReanchored"
+  | "MonetizeRemainderFolded" // F34 carry-(b): a capped claim's remainder expired unclaimed and folded — window_id names the CARRY'S cycle, folded_at_window_id where it folded (freeze or evacuation)
   /**
    * C2 — the mining-exit fee, charged on the SOL leg at `pay_mining_exit`.
    *
