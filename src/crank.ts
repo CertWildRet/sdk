@@ -583,13 +583,17 @@ export class CrankApi {
     roundId: bigint,
     tilesMask: number,
     perTile: bigint,
+    /** L9: the deploy slot guard's K — the most slots the round may have left when this executes.
+     *  255 is inert (the pre-L9 regime); 1 = only at end_slot−1; 0 never opens on a live round (the
+     *  keeper's boot probe). The pre-L9 program drops the byte. */
+    maxSlotsLeft: number = 255,
     entropyVar: PublicKey = ORE_ENTROPY_VAR,
     entropyProgram: PublicKey = ORE_ENTROPY_PROGRAM,
   ): Promise<TransactionInstruction> {
     const wid = await this.currentWindowId();
     const miningAuthority = pdaMiningAuthority()[0];
     return this.client.program.methods
-      .crankMine(bn(roundId), tilesMask, bn(perTile))
+      .crankMine(bn(roundId), tilesMask, bn(perTile), maxSlotsLeft)
       .accountsPartial({
         config: pdaConfig()[0],
         window: pdaWindow(wid)[0],
